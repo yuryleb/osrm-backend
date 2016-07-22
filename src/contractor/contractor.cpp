@@ -703,7 +703,7 @@ EdgeID Contractor::LoadEdgeExpandedGraph(
                               sizeof(unsigned));
         geometry_stream.write(reinterpret_cast<char *>(&(m_geometry_list[0])),
                               number_of_compressed_geometries *
-                                  sizeof(extractor::CompressedEdgeContainer::CompressedEdge));
+                                  sizeof(extractor::CompressedEdgeContainer::OnewayCompressedEdge));
     };
 
     const auto save_datasource_indexes = [&] {
