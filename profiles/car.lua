@@ -438,6 +438,8 @@ function way_function (way, result)
 
   if has_name then
     result.name = name
+  elseif has_ref then
+    result.name = ref
   end
 
   if has_ref then
