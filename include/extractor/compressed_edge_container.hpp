@@ -48,9 +48,6 @@ class CompressedEdgeContainer
     void InitializeBothwayVector();
     unsigned ZipEdges(const unsigned f_edge_pos, const unsigned r_edge_pos);
 
-    void InitializeBothwayVector();
-    unsigned ZipEdges(const unsigned f_edge_pos, const unsigned r_edge_pos);
-
     bool HasEntryForID(const EdgeID edge_id) const;
     bool HasZippedEntryForID(const EdgeID edge_id) const;
     void PrintStatistics() const;
