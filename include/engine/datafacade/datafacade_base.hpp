@@ -4,6 +4,7 @@
 // Exposes all data access interfaces to the algorithms via base class ptr
 
 #include "contractor/query_edge.hpp"
+#include "extractor/compressed_edge_container.hpp"
 #include "extractor/edge_based_node.hpp"
 #include "extractor/external_memory_node.hpp"
 #include "extractor/guidance/turn_instruction.hpp"
@@ -25,6 +26,8 @@
 #include <utility>
 #include <vector>
 
+#include <boost/iterator/transform_iterator.hpp>
+
 namespace osrm
 {
 namespace engine
@@ -33,6 +36,17 @@ namespace datafacade
 {
 
 using EdgeRange = util::range<EdgeID>;
+
+class NodeIDFromEdgeFn
+    : public std::unary_function<extractor::CompressedEdgeContainer::CompressedEdge, NodeID>
+{
+  public:
+    NodeIDFromEdgeFn() {}
+    NodeID operator()(const osrm::extractor::CompressedEdgeContainer::CompressedEdge &edge) const
+    {
+        return edge.node_id;
+    }
+};
 
 class BaseDataFacade
 {
@@ -77,9 +91,19 @@ class BaseDataFacade
 
     virtual GeometryID GetGeometryIndexForEdgeID(const unsigned id) const = 0;
 
-    virtual std::vector<NodeID> GetUncompressedForwardGeometry(const EdgeID id) const = 0;
+    virtual std::pair<
+        boost::transform_iterator<NodeIDFromEdgeFn,
+                                  const extractor::CompressedEdgeContainer::CompressedEdge *>,
+        boost::transform_iterator<NodeIDFromEdgeFn,
+                                  const extractor::CompressedEdgeContainer::CompressedEdge *>>
+    GetUncompressedForwardGeometry(const EdgeID id) const = 0;
 
-    virtual std::vector<NodeID> GetUncompressedReverseGeometry(const EdgeID id) const = 0;
+    virtual std::pair<
+        boost::transform_iterator<NodeIDFromEdgeFn,
+                                  const extractor::CompressedEdgeContainer::CompressedEdge *>,
+        boost::transform_iterator<NodeIDFromEdgeFn,
+                                  const extractor::CompressedEdgeContainer::CompressedEdge *>>
+    GetUncompressedReverseGeometry(const EdgeID id) const = 0;
 
     // Gets the weight values for each segment in an uncompressed geometry.
     // Should always be 1 shorter than GetUncompressedGeometry

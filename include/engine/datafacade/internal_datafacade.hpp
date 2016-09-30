@@ -689,7 +689,12 @@ class InternalDataFacade final : public BaseDataFacade
         }
     }
 
-    virtual std::vector<NodeID> GetUncompressedForwardGeometry(const EdgeID id) const override final
+    virtual std::pair<
+        boost::transform_iterator<NodeIDFromEdgeFn,
+                                  const extractor::CompressedEdgeContainer::CompressedEdge *>,
+        boost::transform_iterator<NodeIDFromEdgeFn,
+                                  const extractor::CompressedEdgeContainer::CompressedEdge *>>
+    GetUncompressedForwardGeometry(const EdgeID id) const override final
     {
         /*
          * NodeID's for geometries are stored in one place for
@@ -703,20 +708,21 @@ class InternalDataFacade final : public BaseDataFacade
         const unsigned begin = m_geometry_indices.at(id) + 1;
         const unsigned end = m_geometry_indices.at(id + 1);
 
-        std::vector<NodeID> result_nodes;
+        auto first = m_geometry_list.begin() + begin;
+        auto last = m_geometry_list.begin() + end;
 
-        result_nodes.reserve(end - begin);
+        auto tfirst = boost::make_transform_iterator(&*first, NodeIDFromEdgeFn());
+        auto tlast = boost::make_transform_iterator(&*last, NodeIDFromEdgeFn());
 
-        std::for_each(m_geometry_list.begin() + begin,
-                      m_geometry_list.begin() + end,
-                      [&](const osrm::extractor::CompressedEdgeContainer::CompressedEdge &edge) {
-                          result_nodes.emplace_back(edge.node_id);
-                      });
-
-        return result_nodes;
+        return std::make_pair(tfirst, tlast);
     }
 
-    virtual std::vector<NodeID> GetUncompressedReverseGeometry(const EdgeID id) const override final
+    virtual std::pair<
+        boost::transform_iterator<NodeIDFromEdgeFn,
+                                  const extractor::CompressedEdgeContainer::CompressedEdge *>,
+        boost::transform_iterator<NodeIDFromEdgeFn,
+                                  const extractor::CompressedEdgeContainer::CompressedEdge *>>
+    GetUncompressedReverseGeometry(const EdgeID id) const override final
     {
         /*
          * NodeID's for geometries are stored in one place for
@@ -727,20 +733,16 @@ class InternalDataFacade final : public BaseDataFacade
          * reverse geometries of bi-directional edges, edges 1 to
          * n-1 of that edge need to be read in reverse.
          */
-        const unsigned begin = m_geometry_indices.at(id);
-        const unsigned end = m_geometry_indices.at(id + 1) - 1;
+        const signed begin = m_geometry_indices.at(id);
+        const signed end = m_geometry_indices.at(id + 1) - 1;
 
-        std::vector<NodeID> result_nodes;
+        auto first = m_geometry_list.rbegin() + (m_geometry_list.size() - end);
+        auto last = m_geometry_list.rbegin() + (m_geometry_list.size() - begin);
 
-        result_nodes.reserve(end - begin);
+        auto tfirst = boost::make_transform_iterator(&*first, NodeIDFromEdgeFn());
+        auto tlast = boost::make_transform_iterator(&*last, NodeIDFromEdgeFn());
 
-        std::for_each(m_geometry_list.rbegin() + (m_geometry_list.size() - end),
-                      m_geometry_list.rbegin() + (m_geometry_list.size() - begin),
-                      [&](const osrm::extractor::CompressedEdgeContainer::CompressedEdge &edge) {
-                          result_nodes.emplace_back(edge.node_id);
-                      });
-
-        return result_nodes;
+        return std::make_pair(tfirst, tlast);
     }
 
     virtual std::vector<EdgeWeight>

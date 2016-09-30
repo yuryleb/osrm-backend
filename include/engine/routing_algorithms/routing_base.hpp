@@ -249,47 +249,53 @@ template <class DataFacadeT, class Derived> class BasicRoutingInterface
                         : facade->GetTravelModeForEdgeID(edge_data.id);
 
                 const auto geometry_index = facade->GetGeometryIndexForEdgeID(edge_data.id);
-                std::vector<NodeID> id_vector;
+                std::pair<boost::transform_iterator<
+                              datafacade::NodeIDFromEdgeFn,
+                              const extractor::CompressedEdgeContainer::CompressedEdge *>,
+                          boost::transform_iterator<
+                              datafacade::NodeIDFromEdgeFn,
+                              const extractor::CompressedEdgeContainer::CompressedEdge *>>
+                    id_iterators;
                 std::vector<EdgeWeight> weight_vector;
                 std::vector<DatasourceID> datasource_vector;
                 if (geometry_index.forward)
                 {
-                    id_vector = facade->GetUncompressedForwardGeometry(geometry_index.id);
+                    id_iterators = facade->GetUncompressedForwardGeometry(geometry_index.id);
                     weight_vector = facade->GetUncompressedForwardWeights(geometry_index.id);
                     datasource_vector =
                         facade->GetUncompressedForwardDatasources(geometry_index.id);
                 }
                 else
                 {
-                    id_vector = facade->GetUncompressedReverseGeometry(geometry_index.id);
+                    id_iterators = facade->GetUncompressedReverseGeometry(geometry_index.id);
                     weight_vector = facade->GetUncompressedReverseWeights(geometry_index.id);
                     datasource_vector =
                         facade->GetUncompressedReverseDatasources(geometry_index.id);
                 }
-                BOOST_ASSERT(id_vector.size() > 0);
+                BOOST_ASSERT(id_iterators.first != id_iterators.second);
                 BOOST_ASSERT(weight_vector.size() > 0);
                 BOOST_ASSERT(datasource_vector.size() > 0);
 
                 const auto total_weight = std::accumulate(weight_vector.begin(), weight_vector.end(), 0);
 
-                BOOST_ASSERT(weight_vector.size() == id_vector.size());
+                BOOST_ASSERT(weight_vector.size() == id_iterators.second - id_iterators.first);
                 const bool is_first_segment = unpacked_path.empty();
 
                 const std::size_t start_index =
                     (is_first_segment
                          ? ((start_traversed_in_reverse)
-                                ? id_vector.size() -
+                                ? (id_iterators.second - id_iterators.first) -
                                       phantom_node_pair.source_phantom.fwd_segment_position - 1
                                 : phantom_node_pair.source_phantom.fwd_segment_position)
                          : 0);
-                const std::size_t end_index = id_vector.size();
+                const std::size_t end_index = id_iterators.second - id_iterators.first;
 
                 BOOST_ASSERT(start_index >= 0);
                 BOOST_ASSERT(start_index < end_index);
                 for (std::size_t i = start_index; i < end_index; ++i)
                 {
                     unpacked_path.push_back(
-                        PathData{id_vector[i],
+                        PathData{*(id_iterators.first + i),
                                  name_index,
                                  weight_vector[i],
                                  extractor::guidance::TurnInstruction::NO_TURN(),
@@ -308,7 +314,12 @@ template <class DataFacadeT, class Derived> class BasicRoutingInterface
             });
 
         std::size_t start_index = 0, end_index = 0;
-        std::vector<unsigned> id_vector;
+        std::pair<
+            boost::transform_iterator<datafacade::NodeIDFromEdgeFn,
+                                      const extractor::CompressedEdgeContainer::CompressedEdge *>,
+            boost::transform_iterator<datafacade::NodeIDFromEdgeFn,
+                                      const extractor::CompressedEdgeContainer::CompressedEdge *>>
+            id_iterators;
         std::vector<EdgeWeight> weight_vector;
         std::vector<DatasourceID> datasource_vector;
         const bool is_local_path = (phantom_node_pair.source_phantom.packed_geometry_id ==
@@ -317,7 +328,7 @@ template <class DataFacadeT, class Derived> class BasicRoutingInterface
 
         if (target_traversed_in_reverse)
         {
-            id_vector = facade->GetUncompressedReverseGeometry(
+            id_iterators = facade->GetUncompressedReverseGeometry(
                 phantom_node_pair.target_phantom.packed_geometry_id);
 
             weight_vector = facade->GetUncompressedReverseWeights(
@@ -328,11 +339,11 @@ template <class DataFacadeT, class Derived> class BasicRoutingInterface
 
             if (is_local_path)
             {
-                start_index =
-                    id_vector.size() - phantom_node_pair.source_phantom.fwd_segment_position - 1;
+                start_index = (id_iterators.second - id_iterators.first) -
+                              phantom_node_pair.source_phantom.fwd_segment_position - 1;
             }
-            end_index =
-                id_vector.size() - phantom_node_pair.target_phantom.fwd_segment_position - 1;
+            end_index = (id_iterators.first - id_iterators.first) -
+                        phantom_node_pair.target_phantom.fwd_segment_position - 1;
         }
         else
         {
@@ -341,7 +352,7 @@ template <class DataFacadeT, class Derived> class BasicRoutingInterface
                 start_index = phantom_node_pair.source_phantom.fwd_segment_position;
             }
             end_index = phantom_node_pair.target_phantom.fwd_segment_position;
-            id_vector = facade->GetUncompressedForwardGeometry(
+            id_iterators = facade->GetUncompressedForwardGeometry(
                 phantom_node_pair.target_phantom.packed_geometry_id);
 
             weight_vector = facade->GetUncompressedForwardWeights(
@@ -360,10 +371,10 @@ template <class DataFacadeT, class Derived> class BasicRoutingInterface
         // note that (x, t) is _not_ included but needs to be added later.
         for (std::size_t i = start_index; i != end_index; (start_index < end_index ? ++i : --i))
         {
-            BOOST_ASSERT(i < id_vector.size());
+            BOOST_ASSERT(i < id_iterators.second - id_iterators.first);
             BOOST_ASSERT(phantom_node_pair.target_phantom.forward_travel_mode > 0);
             unpacked_path.push_back(PathData{
-                id_vector[i],
+                *(id_iterators.first + i),
                 phantom_node_pair.target_phantom.name_id,
                 weight_vector[i],
                 extractor::guidance::TurnInstruction::NO_TURN(),

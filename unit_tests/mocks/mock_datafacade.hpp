@@ -65,11 +65,19 @@ class MockDataFacade final : public engine::datafacade::BaseDataFacade
     {
         return GeometryID{SPECIAL_GEOMETRYID, false};
     }
-    std::vector<NodeID> GetUncompressedForwardGeometry(const EdgeID /* id */) const override
+    std::pair<boost::transform_iterator<osrm::engine::datafacade::NodeIDFromEdgeFn,
+                                        const extractor::CompressedEdgeContainer::CompressedEdge *>,
+              boost::transform_iterator<osrm::engine::datafacade::NodeIDFromEdgeFn,
+                                        const extractor::CompressedEdgeContainer::CompressedEdge *>>
+    GetUncompressedForwardGeometry(const EdgeID /* id */) const override
     {
         return {};
     }
-    std::vector<NodeID> GetUncompressedReverseGeometry(const EdgeID /* id */) const override
+    std::pair<boost::transform_iterator<osrm::engine::datafacade::NodeIDFromEdgeFn,
+                                        const extractor::CompressedEdgeContainer::CompressedEdge *>,
+              boost::transform_iterator<osrm::engine::datafacade::NodeIDFromEdgeFn,
+                                        const extractor::CompressedEdgeContainer::CompressedEdge *>>
+    GetUncompressedReverseGeometry(const EdgeID /* id */) const overrride
     {
         return {};
     }
