@@ -526,11 +526,8 @@ class SharedDataFacade final : public BaseDataFacade
         return m_osmnodeid_list.at(id);
     }
 
-    virtual std::pair<
-        boost::transform_iterator<NodeIDFromEdgeFn,
-                                  const extractor::CompressedEdgeContainer::CompressedEdge *>,
-        boost::transform_iterator<NodeIDFromEdgeFn,
-                                  const extractor::CompressedEdgeContainer::CompressedEdge *>>
+    virtual boost::range_detail::transformed_range<NodeIDFromEdgeFn,
+                                  const boost::iterator_range<const extractor::CompressedEdgeContainer::CompressedEdge *>>
     GetUncompressedForwardGeometry(const EdgeID id) const override final
     {
         /*
@@ -545,20 +542,14 @@ class SharedDataFacade final : public BaseDataFacade
         const unsigned begin = m_geometry_indices.at(id) + 1;
         const unsigned end = m_geometry_indices.at(id + 1);
 
-        auto first = m_geometry_list.begin() + begin;
-        auto last = m_geometry_list.begin() + end;
+        const extractor::CompressedEdgeContainer::CompressedEdge *first = &*(m_geometry_list.begin() + begin);
+        const extractor::CompressedEdgeContainer::CompressedEdge *last = &*(m_geometry_list.begin() + end);
 
-        auto tfirst = boost::make_transform_iterator(&*first, NodeIDFromEdgeFn());
-        auto tlast = boost::make_transform_iterator(&*last, NodeIDFromEdgeFn());
-
-        return std::make_pair(tfirst, tlast);
+        return boost::make_iterator_range(first, last) | boost::adaptors::transformed(NodeIDFromEdgeFn());
     }
 
-    virtual std::pair<
-        boost::transform_iterator<NodeIDFromEdgeFn,
-                                  const extractor::CompressedEdgeContainer::CompressedEdge *>,
-        boost::transform_iterator<NodeIDFromEdgeFn,
-                                  const extractor::CompressedEdgeContainer::CompressedEdge *>>
+    virtual boost::range_detail::transformed_range<NodeIDFromEdgeFn,
+                                  const boost::iterator_range<const extractor::CompressedEdgeContainer::CompressedEdge *>>
     GetUncompressedReverseGeometry(const EdgeID id) const override final
     {
         /*
@@ -573,13 +564,10 @@ class SharedDataFacade final : public BaseDataFacade
         const signed begin = m_geometry_indices.at(id);
         const signed end = m_geometry_indices.at(id + 1) - 1;
 
-        auto first = m_geometry_list.rbegin() + (m_geometry_list.size() - end);
-        auto last = m_geometry_list.rbegin() + (m_geometry_list.size() - begin);
+        const extractor::CompressedEdgeContainer::CompressedEdge *first = &*(m_geometry_list.rbegin() + (m_geometry_list.size() - end));
+        const extractor::CompressedEdgeContainer::CompressedEdge *last = &*(m_geometry_list.rbegin() + (m_geometry_list.size() - begin));
 
-        auto tfirst = boost::make_transform_iterator(&*first, NodeIDFromEdgeFn());
-        auto tlast = boost::make_transform_iterator(&*last, NodeIDFromEdgeFn());
-
-        return std::make_pair(tfirst, tlast);
+        return boost::make_iterator_range(first, last) | boost::adaptors::transformed(NodeIDFromEdgeFn());
     }
 
     virtual std::vector<EdgeWeight>

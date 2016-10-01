@@ -460,13 +460,11 @@ Status TilePlugin::HandleRequest(const api::TileParameters &parameters, std::str
 
         // Now, for every edge-based-node that we discovered (edge-based-nodes are sources
         // and targets of turns).  EBN is short for edge-based-node
-        std::pair<boost::transform_iterator<
-                      datafacade::NodeIDFromEdgeFn,
-                      const extractor::CompressedEdgeContainer::CompressedEdge *>,
-                  boost::transform_iterator<
-                      datafacade::NodeIDFromEdgeFn,
-                      const extractor::CompressedEdgeContainer::CompressedEdge *>>
-            first_geometry, second_geometry;
+        boost::range_detail::transformed_range<datafacade::NodeIDFromEdgeFn,
+            const boost::iterator_range<const extractor::CompressedEdgeContainer::CompressedEdge *>>
+        first_geometry = facade.GetUncompressedForwardGeometry(edge_based_node_info[0].packed_geometry_id),
+        second_geometry = facade.GetUncompressedReverseGeometry(
+                        edge_based_node_info[0].packed_geometry_id);
         std::vector<contractor::QueryEdge::EdgeData> unpacked_shortcut;
         std::vector<EdgeWeight> forward_weight_vector;
         for (const auto &source_ebn : edge_based_node_info)
@@ -549,11 +547,11 @@ Status TilePlugin::HandleRequest(const api::TileParameters &parameters, std::str
                     const auto turn_cost = data.distance - sum_node_weight;
 
                     // Find the three nodes that make up the turn movement)
-                    const auto node_from = first_geometry.second - first_geometry.first > 1
-                                               ? *(first_geometry.second - 2)
+                    const auto node_from = first_geometry.size() > 1
+                                               ? first_geometry[first_geometry.size() - 2]
                                                : source_ebn.second.source_intersection;
                     const auto node_via = source_ebn.second.target_intersection;
-                    const auto node_to = *second_geometry.first;
+                    const auto node_to = second_geometry.front();
 
                     const auto coord_from = facade.GetCoordinateOfNode(node_from);
                     const auto coord_via = facade.GetCoordinateOfNode(node_via);

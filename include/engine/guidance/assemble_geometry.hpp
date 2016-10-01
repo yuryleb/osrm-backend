@@ -48,7 +48,7 @@ inline LegGeometry assembleGeometry(const datafacade::BaseDataFacade &facade,
     const auto reverse_geometry =
         facade.GetUncompressedReverseGeometry(source_node.packed_geometry_id);
     geometry.osm_node_ids.push_back(facade.GetOSMNodeIDOfNode(
-        *(reverse_geometry.second - source_node.fwd_segment_position - 1)));
+        reverse_geometry[reverse_geometry.size() - source_node.fwd_segment_position - 1]));
 
     auto cumulative_distance = 0.;
     auto current_distance = 0.;
@@ -95,7 +95,7 @@ inline LegGeometry assembleGeometry(const datafacade::BaseDataFacade &facade,
     const auto forward_geometry =
         facade.GetUncompressedForwardGeometry(target_node.packed_geometry_id);
     geometry.osm_node_ids.push_back(
-        facade.GetOSMNodeIDOfNode(*(forward_geometry.first + target_node.fwd_segment_position)));
+        facade.GetOSMNodeIDOfNode(forward_geometry[target_node.fwd_segment_position]));
 
     BOOST_ASSERT(geometry.segment_distances.size() == geometry.segment_offsets.size() - 1);
     BOOST_ASSERT(geometry.locations.size() > geometry.segment_distances.size());

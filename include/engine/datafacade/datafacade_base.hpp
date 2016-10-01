@@ -27,6 +27,8 @@
 #include <vector>
 
 #include <boost/iterator/transform_iterator.hpp>
+#include <boost/range/iterator_range.hpp>
+#include <boost/range/adaptor/transformed.hpp>
 
 namespace osrm
 {
@@ -91,18 +93,12 @@ class BaseDataFacade
 
     virtual GeometryID GetGeometryIndexForEdgeID(const unsigned id) const = 0;
 
-    virtual std::pair<
-        boost::transform_iterator<NodeIDFromEdgeFn,
-                                  const extractor::CompressedEdgeContainer::CompressedEdge *>,
-        boost::transform_iterator<NodeIDFromEdgeFn,
-                                  const extractor::CompressedEdgeContainer::CompressedEdge *>>
+    virtual boost::range_detail::transformed_range<NodeIDFromEdgeFn,
+                                  const boost::iterator_range<const extractor::CompressedEdgeContainer::CompressedEdge *>>
     GetUncompressedForwardGeometry(const EdgeID id) const = 0;
 
-    virtual std::pair<
-        boost::transform_iterator<NodeIDFromEdgeFn,
-                                  const extractor::CompressedEdgeContainer::CompressedEdge *>,
-        boost::transform_iterator<NodeIDFromEdgeFn,
-                                  const extractor::CompressedEdgeContainer::CompressedEdge *>>
+    virtual boost::range_detail::transformed_range<NodeIDFromEdgeFn,
+                                  const boost::iterator_range<const extractor::CompressedEdgeContainer::CompressedEdge *>>
     GetUncompressedReverseGeometry(const EdgeID id) const = 0;
 
     // Gets the weight values for each segment in an uncompressed geometry.
