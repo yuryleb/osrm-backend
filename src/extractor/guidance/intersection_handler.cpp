@@ -1,5 +1,5 @@
-#include "extractor/guidance/intersection_handler.hpp"
 #include "extractor/guidance/constants.hpp"
+#include "extractor/guidance/intersection_handler.hpp"
 #include "extractor/guidance/toolkit.hpp"
 
 #include "util/coordinate_calculation.hpp"
@@ -11,6 +11,17 @@
 
 using EdgeData = osrm::util::NodeBasedDynamicGraph::EdgeData;
 using osrm::util::guidance::getTurnDirection;
+
+struct out_way
+{
+    bool entry_allowed = false;
+    bool same_name_id = false;
+    bool same_classification = false;
+    bool same_or_higher_priority = false;
+    double deviation_from_straight = 180;
+    int index = 0;
+    osrm::extractor::guidance::ConnectedRoad const *road = nullptr;
+};
 
 namespace osrm
 {
@@ -383,131 +394,136 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
     if (intersection.size() == 2)
         return 1;
 
-    // at least three roads
     std::size_t best = 0;
     double best_deviation = 180;
-
     std::size_t best_continue = 0;
     double best_continue_deviation = 180;
 
-    const EdgeData &in_data = node_based_graph.GetEdgeData(via_edge);
-    const auto in_classification = in_data.road_classification;
+    const EdgeData &in_way = node_based_graph.GetEdgeData(via_edge);
 
-    for (std::size_t i = 1; i < intersection.size(); ++i)
+    std::vector<out_way> out_ways;
+
+    for (std::size_t i = 1, last = intersection.size(); i < last; ++i)
     {
-        const double deviation = angularDeviation(intersection[i].angle, STRAIGHT_ANGLE);
+        out_way out;
+        out.index = i;
+        out.road = &intersection[i];
+        out.entry_allowed = intersection[i].entry_allowed;
         if (!intersection[i].entry_allowed)
-            continue;
-
-        const auto out_data = node_based_graph.GetEdgeData(intersection[i].eid);
-        const auto continue_class =
-            node_based_graph.GetEdgeData(intersection[best_continue].eid).road_classification;
-
-        const auto same_name = !util::guidance::requiresNameAnnounced(
-            in_data.name_id, out_data.name_id, name_table, street_name_suffix_table);
-
-        if (same_name && (best_continue == 0 || (continue_class.GetPriority() >
-                                                     out_data.road_classification.GetPriority() &&
-                                                 in_classification != continue_class) ||
-                          (deviation < best_continue_deviation &&
-                           out_data.road_classification == continue_class) ||
-                          (continue_class != in_classification &&
-                           out_data.road_classification == continue_class)))
         {
-            best_continue_deviation = deviation;
-            best_continue = i;
+            out_ways.push_back(out);
+            continue;
         }
 
-        const auto current_best_class =
-            node_based_graph.GetEdgeData(intersection[best_continue].eid).road_classification;
+        const auto out_node = node_based_graph.GetEdgeData(intersection[i].eid);
+        const auto out_classification = out_node.road_classification;
 
-        // don't prefer low priority classes
-        if (best != 0 && out_data.road_classification.IsLowPriorityRoadClass() &&
-            !current_best_class.IsLowPriorityRoadClass())
-            continue;
+        out.deviation_from_straight = angularDeviation(intersection[i].angle, STRAIGHT_ANGLE);
+        out.same_or_higher_priority =
+            out_node.road_classification.GetPriority() <= in_way.road_classification.GetPriority();
+        out.same_classification = out_classification == in_way.road_classification;
+        out.same_name_id = out_node.name_id == in_way.name_id;
 
-        const bool is_better_choice_by_priority =
-            best == 0 || obviousByRoadClass(in_data.road_classification,
-                                            out_data.road_classification,
-                                            current_best_class);
+        out_ways.push_back(out);
+    }
+    // sort out ways by what they share with the in way
+    // entry allowed, lowest deviation to greatest deviation, name, classification and priority
+    const auto sort_by = [](const out_way &lhs, const out_way &rhs) {
+        auto left_tie =
+            std::tie(lhs.same_name_id, lhs.same_classification, lhs.same_or_higher_priority);
+        auto right_tie =
+            std::tie(rhs.same_name_id, rhs.same_classification, rhs.same_or_higher_priority);
+        return lhs.entry_allowed > rhs.entry_allowed ||
+               (lhs.entry_allowed == rhs.entry_allowed &&
+                (lhs.deviation_from_straight < rhs.deviation_from_straight ||
+                 (lhs.deviation_from_straight == rhs.deviation_from_straight &&
+                  left_tie > right_tie)));
+    };
+    std::stable_sort(begin(out_ways), end(out_ways), sort_by);
 
-        const bool other_is_better_choice_by_priority =
-            best != 0 && obviousByRoadClass(in_data.road_classification,
-                                            current_best_class,
-                                            out_data.road_classification);
-
-        if ((!other_is_better_choice_by_priority && deviation < best_deviation) ||
-            is_better_choice_by_priority)
-        {
-            best_deviation = deviation;
-            best = i;
-        }
+    const auto allowed = [](const out_way &way) { return way.entry_allowed == true; };
+    // dead end, or otherwise no exitable ways
+    if (std::none_of(begin(out_ways), end(out_ways), allowed))
+    {
+        return 0;
     }
 
-    // We don't consider empty names a valid continue feature. This distinguishes between missing
-    // names and actual continuing roads.
-    if (in_data.name_id == EMPTY_NAMEID)
-        best_continue = 0;
+    // best candidate is the first way sorted to have the smallest deviation from
+    // straight and is same or higher priority class
+    const auto notLowPriority = [&](const out_way &way) {
+        return way.entry_allowed &&
+               !node_based_graph.GetEdgeData(way.road->eid)
+                    .road_classification.IsLowPriorityRoadClass();
+    };
+    const auto best_candidate_it = std::find_if(begin(out_ways), end(out_ways), notLowPriority);
+    if (best_candidate_it != end(out_ways))
+    {
+        best = best_candidate_it->index;
+        best_deviation = best_candidate_it->deviation_from_straight;
+    }
 
+    // No non-low priority roads? Declare no obvious turn
     if (best == 0)
         return 0;
 
+    // get a count of number of ways from that intersection that qualify to have
+    // continue instruction because they share a name with the approaching way
     const std::pair<std::int64_t, std::int64_t> num_continue_names = [&]() {
         std::int64_t count = 0, count_valid = 0;
-        if (in_data.name_id != EMPTY_NAMEID)
+        std::size_t i, last = out_ways.size();
+        for (i = 0; i < last; ++i)
         {
-            for (std::size_t i = 1; i < intersection.size(); ++i)
-            {
-                const auto &road = intersection[i];
-                const auto &road_data = node_based_graph.GetEdgeData(road.eid);
-
-                const auto same_name = !util::guidance::requiresNameAnnounced(
-                    in_data.name_id, road_data.name_id, name_table, street_name_suffix_table);
-
-                if (same_name)
-                {
-                    ++count;
-                    if (road.entry_allowed)
-                        ++count_valid;
-                }
-            }
+            if (out_ways[i].same_name_id)
+                ++count;
+            if (out_ways[i].entry_allowed)
+                ++count_valid;
         }
         return std::make_pair(count, count_valid);
     }();
 
+    // no out ways share the same name as the approach street
+    if (num_continue_names.first == 0)
+    {
+        best_continue = 0;
+    }
+    else
+    {
+        // continue roads exist
+        // best_continue is the first sorted way that shares the same name as the in way
+        const auto sameName = [](const out_way &lhs) {
+            return lhs.same_name_id == true && lhs.entry_allowed;
+        };
+        const auto best_continue_it = std::find_if(begin(out_ways), end(out_ways), sameName);
+        best_continue = best_continue_it->index;
+        best_continue_deviation = best_continue_it->deviation_from_straight;
+    }
+
+    // if the best angle is going straight but the road is turning, declare no obvious turn
     if (0 != best_continue && best != best_continue &&
         angularDeviation(intersection[best].angle, STRAIGHT_ANGLE) <
             MAXIMAL_ALLOWED_NO_TURN_DEVIATION &&
         node_based_graph.GetEdgeData(intersection[best_continue].eid).road_classification ==
             node_based_graph.GetEdgeData(intersection[best].eid).road_classification)
     {
-        // if the best angle is going straight but the road is turning, we don't name anything
-        // obvious
         return 0;
     }
 
+    // checks if continue candidates are sharp turns
     const bool all_continues_are_narrow = [&]() {
-        if (in_data.name_id == EMPTY_NAMEID)
+        // no continue candidates
+        if (best_continue == 0)
             return false;
 
-        return std::count_if(
-                   intersection.begin() + 1, intersection.end(), [&](const ConnectedRoad &road) {
-                       const auto &road_data = node_based_graph.GetEdgeData(road.eid);
-                       const auto same_name =
-                           !util::guidance::requiresNameAnnounced(in_data.name_id,
-                                                                  road_data.name_id,
-                                                                  name_table,
-                                                                  street_name_suffix_table);
-
-                       return same_name &&
-                              angularDeviation(road.angle, STRAIGHT_ANGLE) < NARROW_TURN_ANGLE;
-                   }) == num_continue_names.first;
+        return std::count_if(begin(out_ways), end(out_ways), [&](const out_way &road) {
+                   return road.same_name_id && road.deviation_from_straight < NARROW_TURN_ANGLE;
+               }) == num_continue_names.first;
     }();
 
-    // has no obvious continued road
     const auto &best_data = node_based_graph.GetEdgeData(intersection[best].eid);
 
-    const auto check_non_continue = [&]() {
+    // return true if the best candidate is more promising than the best_continue candidate
+    // otherwise return false, the best_continue candidate is more promising
+    const auto best_over_best_continue = [&]() {
         // no continue road exists
         if (best_continue == 0)
             return true;
@@ -525,12 +541,12 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
         // continue data now most certainly exists
         const auto &continue_data = node_based_graph.GetEdgeData(intersection[best_continue].eid);
 
-        if (obviousByRoadClass(in_data.road_classification,
+        if (obviousByRoadClass(in_way.road_classification,
                                continue_data.road_classification,
                                best_data.road_classification))
             return false;
 
-        if (obviousByRoadClass(in_data.road_classification,
+        if (obviousByRoadClass(in_way.road_classification,
                                best_data.road_classification,
                                continue_data.road_classification))
             return true;
@@ -543,7 +559,7 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
         // the continue road is of a lower priority, while the road continues on the same priority
         // with a better angle
         if (best_deviation < best_continue_deviation &&
-            in_data.road_classification == best_data.road_classification &&
+            in_way.road_classification == best_data.road_classification &&
             continue_data.road_classification.GetPriority() >
                 best_data.road_classification.GetPriority())
             return true;
@@ -551,7 +567,7 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
         return false;
     }();
 
-    if (check_non_continue)
+    if (best_over_best_continue)
     {
         // Find left/right deviation
         // skipping over service roads
@@ -561,7 +577,7 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
                 return index_candidate;
             const auto &candidate_data =
                 node_based_graph.GetEdgeData(intersection[index_candidate].eid);
-            if (obviousByRoadClass(in_data.road_classification,
+            if (obviousByRoadClass(in_way.road_classification,
                                    best_data.road_classification,
                                    candidate_data.road_classification))
                 return (index_candidate + 1) % intersection.size();
@@ -576,7 +592,7 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
                 return index_candidate;
             const auto candidate_data =
                 node_based_graph.GetEdgeData(intersection[index_candidate].eid);
-            if (obviousByRoadClass(in_data.road_classification,
+            if (obviousByRoadClass(in_way.road_classification,
                                    best_data.road_classification,
                                    candidate_data.road_classification))
                 return index_candidate - 1;
@@ -597,11 +613,11 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
         const auto &right_data = node_based_graph.GetEdgeData(intersection[right_index].eid);
 
         const bool obvious_to_left =
-            left_index == 0 || obviousByRoadClass(in_data.road_classification,
+            left_index == 0 || obviousByRoadClass(in_way.road_classification,
                                                   best_data.road_classification,
                                                   left_data.road_classification);
         const bool obvious_to_right =
-            right_index == 0 || obviousByRoadClass(in_data.road_classification,
+            right_index == 0 || obviousByRoadClass(in_way.road_classification,
                                                    best_data.road_classification,
                                                    right_data.road_classification);
 
@@ -632,7 +648,7 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
                 if (!intersection[index].entry_allowed)
                     return 0.7 * DISTINCTION_RATIO;
                 // a bit less obvious are road classes
-                else if (in_data.road_classification == best_data.road_classification &&
+                else if (in_way.road_classification == best_data.road_classification &&
                          best_data.road_classification.GetPriority() <
                              node_based_graph.GetEdgeData(intersection[index].eid)
                                  .road_classification.GetPriority())
@@ -653,21 +669,21 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
     }
     else
     {
-        const double deviation =
-            angularDeviation(intersection[best_continue].angle, STRAIGHT_ANGLE);
-        const auto &continue_data = node_based_graph.GetEdgeData(intersection[best_continue].eid);
-        if (std::abs(deviation) < 1)
+        const auto &continue_data =
+            node_based_graph.GetEdgeData(intersection[best_continue].eid);
+        if (std::abs(best_continue_deviation) < 1)
             return best_continue;
 
         // check if any other similar best continues exist
-        for (std::size_t i = 1; i < intersection.size(); ++i)
+        std::size_t i, last = intersection.size();
+        for (i = 1; i < last; ++i)
         {
             if (i == best_continue || !intersection[i].entry_allowed)
                 continue;
 
             const auto &turn_data = node_based_graph.GetEdgeData(intersection[i].eid);
             const bool is_obvious_by_road_class =
-                obviousByRoadClass(in_data.road_classification,
+                obviousByRoadClass(in_way.road_classification,
                                    continue_data.road_classification,
                                    turn_data.road_classification);
 
@@ -677,7 +693,9 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
                 continue;
 
             // continuation could be grouped with a straight turn and the turning road is a ramp
-            if (turn_data.road_classification.IsRampClass() && deviation < GROUP_ANGLE)
+            if (turn_data.road_classification.IsRampClass() &&
+                best_continue_deviation < GROUP_ANGLE &&
+                !continue_data.road_classification.IsRampClass())
                 continue;
 
             // perfectly straight turns prevent obviousness
@@ -685,9 +703,9 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
             if (turn_deviation < FUZZY_ANGLE_DIFFERENCE)
                 return 0;
 
-            const auto deviation_ratio = turn_deviation / deviation;
+            const auto deviation_ratio = turn_deviation / best_continue_deviation;
 
-            // in comparison to normal devitions, a continue road can offer a smaller distinction
+            // in comparison to normal deviations, a continue road can offer a smaller distinction
             // ratio. Other roads close to the turn angle are not as obvious, if one road continues.
             if (deviation_ratio < DISTINCTION_RATIO / 1.5)
                 return 0;
