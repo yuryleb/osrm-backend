@@ -455,8 +455,9 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
                !node_based_graph.GetEdgeData(way.road->eid)
                     .road_classification.IsLowPriorityRoadClass();
     };
-    const auto best_candidate_it = std::find_if(begin(out_ways), end(out_ways), notLowPriority);
-    if (best_candidate_it != end(out_ways))
+    const auto End = end(out_ways);
+    const auto best_candidate_it = std::find_if(begin(out_ways), End, notLowPriority);
+    if (best_candidate_it != End)
     {
         best = best_candidate_it->index;
         best_deviation = best_candidate_it->deviation_from_straight;
@@ -493,9 +494,12 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
         const auto sameName = [&](const out_way &lhs) {
             return lhs.same_name_id == true && lhs.entry_allowed && lhs.same_or_higher_priority;
         };
-        const auto best_continue_it = std::find_if(begin(out_ways), end(out_ways), sameName);
-        best_continue = best_continue_it->index;
-        best_continue_deviation = best_continue_it->deviation_from_straight;
+        const auto End = end(out_ways);
+        const auto best_continue_it = std::find_if(begin(out_ways), End, sameName);
+        if (best_continue_it != End) {
+            best_continue = best_continue_it->index;
+            best_continue_deviation = best_continue_it->deviation_from_straight;
+        }
     }
 
     // if the best angle is going straight but the road is turning, declare no obvious turn
