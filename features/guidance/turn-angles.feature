@@ -742,7 +742,6 @@ Feature: Simple Turns
 
     #http://www.openstreetmap.org/#map=19/52.53293/13.32956
     Scenario: Curved Exit from Curved Road
-        Given a grid size of 5 meters
         Given the node map
             """
                                                                         g
@@ -774,9 +773,9 @@ Feature: Simple Turns
 
         When I route I should get
             | waypoints | route                   | turns                               |
-            | a,j       | Siemens,Siemens,Siemens | depart,continue right,arrive |
-            | a,g       | Siemens,Erna,Erna       | depart,new name straight,arrive  |
-            | g,j       | Erna,Siemens,Siemens    | depart,turn left,arrive       |
+            | a,j       | Siemens,Siemens,Siemens | depart,continue slight right,arrive |
+            | a,g       | Siemens,Erna,Erna       | depart,new name slight left,arrive  |
+            | g,j       | Erna,Siemens,Siemens    | depart,turn sharp left,arrive       |
             | g,a       | Erna,Siemens,Siemens    | depart,new name slight right,arrive |
 
      #http://www.openstreetmap.org/#map=19/52.51303/13.32170
