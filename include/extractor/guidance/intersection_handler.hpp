@@ -60,6 +60,7 @@ class IntersectionHandler
     // other possible turns. The function will consider road categories and other inputs like the
     // turn angles.
     std::size_t findObviousTurn(const EdgeID via_edge, const Intersection &intersection) const;
+    std::size_t findObviousTurn2(const EdgeID via_edge, const Intersection &intersection) const;
 
     // Obvious turns can still take multiple forms. This function looks at the turn onto a road
     // candidate when coming from a via_edge and determines the best instruction to emit.

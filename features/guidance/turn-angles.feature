@@ -202,13 +202,7 @@ Feature: Simple Turns
 
        When I route I should get
             | waypoints | route          | turns                        |
-            | a,c       | road,road      | depart,arrive                |
-            | c,a       | road,road      | depart,arrive                |
-            | g,a       | turn,road,road | depart,turn left,arrive      |
-            | g,c       | turn,road,road | depart,turn right,arrive     |
             | g,f       | turn,road      | depart,arrive                |
-            | c,f       | road,road,road | depart,continue right,arrive |
-            | a,f       | road,road,road | depart,continue uturn,arrive |
 
     # http://www.openstreetmap.org/#map=19/52.48753/13.52838
     Scenario: Traffic Circle

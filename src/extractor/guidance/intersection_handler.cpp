@@ -6,6 +6,9 @@
 #include "util/guidance/toolkit.hpp"
 #include "util/simple_logger.hpp"
 
+#include "util/debug.hpp"
+#include <iostream>
+
 #include <algorithm>
 #include <cstddef>
 
@@ -384,6 +387,15 @@ bool IntersectionHandler::isThroughStreet(const std::size_t index,
 }
 
 std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
+                                                 const Intersection &intersection) const
+{
+    util::guidance::print(intersection);
+    auto obv = findObviousTurn2(via_edge, intersection);
+    std::cout << ">>> Obvious Index for this ^ intersection: " << obv << std::endl;
+    return obv;
+}
+
+std::size_t IntersectionHandler::findObviousTurn2(const EdgeID via_edge,
                                                  const Intersection &intersection) const
 {
     // no obvious road
