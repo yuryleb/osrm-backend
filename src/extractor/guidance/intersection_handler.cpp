@@ -438,9 +438,9 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
     // entry allowed, lowest deviation to greatest deviation, name, classification and priority
     const auto sort_by = [](const out_way &lhs, const out_way &rhs) {
         auto left_tie =
-            std::tie(lhs.same_classification, rhs.same_name_id, lhs.same_or_higher_priority);
+            std::tie(lhs.same_classification, lhs.same_or_higher_priority);
         auto right_tie =
-            std::tie(rhs.same_classification, rhs.same_name_id, rhs.same_or_higher_priority);
+            std::tie(rhs.same_classification, rhs.same_or_higher_priority);
         return lhs.entry_allowed > rhs.entry_allowed ||
                (lhs.entry_allowed == rhs.entry_allowed &&
                 (lhs.deviation_from_straight < rhs.deviation_from_straight ||
@@ -460,7 +460,9 @@ std::size_t IntersectionHandler::findObviousTurn(const EdgeID via_edge,
                !node_based_graph.GetEdgeData(way.road->eid)
                     .road_classification.IsLowPriorityRoadClass();
     };
-    auto best_candidate_it = std::find_if(begin(out_ways), End, notLowPriority);
+    auto best_candidate_it = std::find_if(begin(out_ways), End, sameOrHigher);
+    if (best_candidate_it == End)
+        best_candidate_it = std::find_if(begin(out_ways), End, notLowPriority);
 
     if (best_candidate_it != End)
     {
