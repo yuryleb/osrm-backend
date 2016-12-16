@@ -45,9 +45,10 @@ IntersectionView IntersectionGenerator::operator()(const NodeID from_node,
 IntersectionShape
 IntersectionGenerator::ComputeIntersectionShape(const NodeID node_at_center_of_intersection,
                                                 const boost::optional<NodeID> sorting_base,
-                                                const bool use_low_precision_angles) const
+                                                const bool use_low_precision_angles,
+                                                IntersectionShape::allocator_type::arena_type &allocation_arena) const
 {
-    IntersectionShape intersection;
+    IntersectionShape intersection(allocation_arena);
     // reserve enough items (+ the possibly missing u-turn edge)
     const auto intersection_degree = node_based_graph.GetOutDegree(node_at_center_of_intersection);
     intersection.reserve(intersection_degree);

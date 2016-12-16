@@ -2,6 +2,7 @@
 #define OSRM_EXTRACTOR_GUIDANCE_INTERSECTION_HPP_
 
 #include <algorithm>
+#include <cstddef>
 #include <functional>
 #include <limits>
 #include <string>
@@ -11,6 +12,7 @@
 #include "extractor/guidance/turn_instruction.hpp"
 #include "util/bearing.hpp"
 #include "util/node_based_graph.hpp"
+#include "util/stack-allocator.hpp"
 #include "util/typedefs.hpp" // EdgeID
 
 #include <boost/range/adaptor/transformed.hpp>
@@ -65,26 +67,26 @@ struct IntersectionViewData : IntersectionShapeData
     bool CompareByAngle(const IntersectionViewData &other) const;
 };
 
-// A Connected Road is the internal representation of a potential turn. Internally, we require
-// full list of all connected roads to determine the outcome.
-// The reasoning behind is that even invalid turns can influence the perceived angles, or even
-// instructions themselves. An possible example can be described like this:
-//
-// aaa(2)aa
-//          a - bbbbb
-// aaa(1)aa
-//
-// will not be perceived as a turn from (1) -> b, and as a U-turn from (1) -> (2).
-// In addition, they can influence whether a turn is obvious or not. b->(2) would also be no
-// turn-operation, but rather a name change.
-//
-// If this were a normal intersection with
-//
-// cccccccc
-//            o  bbbbb
-// aaaaaaaa
-//
-// We would perceive a->c as a sharp turn, a->b as a slight turn, and b->c as a slight turn.
+/* A Connected Road is the internal representation of a potential turn. Internally, we require
+ * full list of all connected roads to determine the outcome.
+ * The reasoning behind is that even invalid turns can influence the perceived angles, or even
+ * instructions themselves. An possible example can be described like this:
+ *
+ * aaa(2)aa
+ *          a - bbbbb
+ * aaa(1)aa
+ *
+ * will not be perceived as a turn from (1) -> b, and as a U-turn from (1) -> (2).
+ * In addition, they can influence whether a turn is obvious or not. b->(2) would also be no
+ * turn-operation, but rather a name change.
+ *
+ * If this were a normal intersection with
+ *
+ * cccccccc
+ *            o  bbbbb
+ * aaaaaaaa
+ *
+ * We would perceive a->c as a sharp turn, a->b as a slight turn, and b->c as a slight turn. */
 struct ConnectedRoad final : IntersectionViewData
 {
     ConnectedRoad(const IntersectionViewData &view,
@@ -110,25 +112,30 @@ struct ConnectedRoad final : IntersectionViewData
 // small helper function to print the content of a connected road
 std::string toString(const ConnectedRoad &road);
 
+const constexpr std::size_t max_size = 100;
+
+template <class T, std::size_t max_element_count>
+using StackAllocatedVector =
+    std::vector<T, util::StackAllocator<T, max_element_count * alignof(T), alignof(T)>>;
+
 // Intersections are sorted roads: [0] being the UTurn road, then from sharp right to sharp left.
+using IntersectionShape = StackAllocatedVector<IntersectionShapeData, max_size>;
 
-using IntersectionShape = std::vector<IntersectionShapeData>;
-
-// Common operations shared among IntersectionView and Intersections.
-// Inherit to enable those operations on your compatible type. CRTP pattern.
+/* Common operations shared among IntersectionView and Intersections.
+ * Inherit to enable those operations on your compatible type. CRTP pattern. */
 template <typename Self> struct EnableIntersectionOps
 {
-    // Find the turn whose angle offers the least angular deviation to the specified angle
-    // For turn angles [0, 90, 260] and a query of 180 we return the 260 degree turn.
+    /* Find the turn whose angle offers the least angular deviation to the specified angle
+     * For turn angles [0, 90, 260] and a query of 180 we return the 260 degree turn. */
     auto findClosestTurn(double angle) const
     {
         auto comp = makeCompareAngularDeviation(angle);
         return std::min_element(self()->begin(), self()->end(), comp);
     }
 
-    // Check validity of the intersection object. We assume a few basic properties every set of
-    // connected roads should follow throughout guidance pre-processing. This utility function
-    // allows checking intersections for validity
+    /* Check validity of the intersection object. We assume a few basic properties every set of
+     * connected roads should follow throughout guidance pre-processing. This utility function
+     * allows checking intersections for validity */
     auto valid() const
     {
         if (self()->empty())
@@ -209,14 +216,14 @@ template <typename Self> struct EnableIntersectionOps
     auto self() const { return static_cast<const Self *>(this); }
 };
 
-struct IntersectionView final : std::vector<IntersectionViewData>,      //
-                                EnableIntersectionOps<IntersectionView> //
+struct IntersectionView final : StackAllocatedVector<IntersectionViewData, max_size>, //
+                                EnableIntersectionOps<IntersectionView>               //
 {
     using Base = std::vector<IntersectionViewData>;
 };
 
-struct Intersection final : std::vector<ConnectedRoad>,         //
-                            EnableIntersectionOps<Intersection> //
+struct Intersection final : StackAllocatedVector<ConnectedRoad, max_size>, //
+                            EnableIntersectionOps<Intersection>            //
 {
     using Base = std::vector<ConnectedRoad>;
 };

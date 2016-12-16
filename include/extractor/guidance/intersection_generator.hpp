@@ -53,7 +53,8 @@ class IntersectionGenerator
     IntersectionShape
     ComputeIntersectionShape(const NodeID center_node,
                              const boost::optional<NodeID> sorting_base = boost::none,
-                             bool use_low_precision_angles = false) const;
+                             bool use_low_precision_angle,
+                             IntersectionShape::allocator_type &allocation_arena_type) const;
 
     // Graph Compression cannot compress every setting. For example any barrier/traffic light cannot
     // be compressed. As a result, a simple road of the form `a ----- b` might end up as having an
