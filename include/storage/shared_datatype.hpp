@@ -23,8 +23,8 @@ const constexpr char *block_id_to_name[] = {"NAME_OFFSETS",
                                             "NAME_CHAR_LIST",
                                             "NAME_ID_LIST",
                                             "VIA_NODE_LIST",
-                                            "GRAPH_NODE_LIST",
-                                            "GRAPH_EDGE_LIST",
+                                            "CH_GRAPH_NODE_LIST",
+                                            "CH_GRAPH_EDGE_LIST",
                                             "COORDINATE_LIST",
                                             "OSM_NODE_ID_LIST",
                                             "TURN_INSTRUCTION",
@@ -40,7 +40,7 @@ const constexpr char *block_id_to_name[] = {"NAME_OFFSETS",
                                             "HSGR_CHECKSUM",
                                             "TIMESTAMP",
                                             "FILE_INDEX_PATH",
-                                            "CORE_MARKER",
+                                            "CH_CORE_MARKER",
                                             "DATASOURCES_LIST",
                                             "DATASOURCE_NAME_DATA",
                                             "DATASOURCE_NAME_OFFSETS",
@@ -69,8 +69,8 @@ struct DataLayout
         NAME_CHAR_LIST,
         NAME_ID_LIST,
         VIA_NODE_LIST,
-        GRAPH_NODE_LIST,
-        GRAPH_EDGE_LIST,
+        CH_GRAPH_NODE_LIST,
+        CH_GRAPH_EDGE_LIST,
         COORDINATE_LIST,
         OSM_NODE_ID_LIST,
         TURN_INSTRUCTION,
@@ -86,7 +86,7 @@ struct DataLayout
         HSGR_CHECKSUM,
         TIMESTAMP,
         FILE_INDEX_PATH,
-        CORE_MARKER,
+        CH_CORE_MARKER,
         DATASOURCES_LIST,
         DATASOURCE_NAME_DATA,
         DATASOURCE_NAME_OFFSETS,
@@ -125,7 +125,7 @@ struct DataLayout
     inline uint64_t GetBlockSize(BlockID bid) const
     {
         // special bit encoding
-        if (bid == CORE_MARKER)
+        if (bid == CH_CORE_MARKER)
         {
             return (num_entries[bid] / 32 + 1) * entry_size[bid];
         }
