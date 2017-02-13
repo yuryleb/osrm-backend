@@ -1,4 +1,5 @@
 #include "partition/dinic_max_flow.hpp"
+#include "partition/visualisation.hpp"
 #include "util/integer_range.hpp"
 
 #include <algorithm>
@@ -35,6 +36,17 @@ DinicMaxFlow::MinCut DinicMaxFlow::operator()(const GraphView &view,
                                               const SourceSinkNodes &source_nodes,
                                               const SourceSinkNodes &sink_nodes) const
 {
+    visual::CutEntry cut_vis_entry;
+    cut_vis_entry.source_nodes.resize(source_nodes.size());
+    cut_vis_entry.sink_nodes.resize(sink_nodes.size());
+    const auto to_coordinate = [&](const NodeID nid) { return view.Node(nid).coordinate; };
+    std::transform(source_nodes.begin(),
+                   source_nodes.end(),
+                   cut_vis_entry.source_nodes.begin(),
+                   to_coordinate);
+    std::transform(
+        sink_nodes.begin(), sink_nodes.end(), cut_vis_entry.sink_nodes.begin(), to_coordinate);
+
     BOOST_ASSERT(Validate(view, source_nodes, sink_nodes));
     // for the inertial flow algorithm, we use quite a large set of nodes as source/sink nodes. Only
     // a few of them can be part of the process, since they are grouped together. A standard
@@ -79,7 +91,8 @@ DinicMaxFlow::MinCut DinicMaxFlow::operator()(const GraphView &view,
 
         if (!separated)
         {
-            flow_value += BlockingFlow(flow, levels, view, source_nodes, border_sink_nodes);
+            flow_value +=
+                BlockingFlow(flow, levels, view, source_nodes, border_sink_nodes, cut_vis_entry);
         }
         else
         {
@@ -87,7 +100,7 @@ DinicMaxFlow::MinCut DinicMaxFlow::operator()(const GraphView &view,
             // heuristic)
             for (auto s : source_nodes)
                 levels[s] = 0;
-            const auto cut = MakeCut(view, levels, flow_value);
+            const auto cut = MakeCut(view, levels, flow_value, std::move(cut_vis_entry));
             return cut;
         }
     } while (true);
@@ -95,7 +108,8 @@ DinicMaxFlow::MinCut DinicMaxFlow::operator()(const GraphView &view,
 
 DinicMaxFlow::MinCut DinicMaxFlow::MakeCut(const GraphView &view,
                                            const LevelGraph &levels,
-                                           const std::size_t flow_value) const
+                                           const std::size_t flow_value,
+                                           visual::CutEntry cut_vis_entry) const
 {
     const auto is_valid_level = [](const Level level) { return level != INVALID_LEVEL; };
 
@@ -108,7 +122,25 @@ DinicMaxFlow::MinCut DinicMaxFlow::MakeCut(const GraphView &view,
     std::size_t source_side_count = std::count_if(levels.begin(), levels.end(), is_valid_level);
     std::transform(levels.begin(), levels.end(), result.begin(), is_valid_level);
 
-    return {source_side_count, flow_value, std::move(result)};
+    std::vector<util::Coordinate> cut_nodes;
+    // find cut coordinates
+    for (const auto &node : view.Nodes())
+    {
+        if (result[view.GetID(node)])
+        {
+            for (const auto &edge : view.Edges(node))
+            {
+                if (!result[edge.target])
+                {
+                    cut_nodes.push_back(node.coordinate);
+                    break;
+                }
+            }
+        }
+    }
+    cut_vis_entry.cut = cut_nodes;
+
+    return {source_side_count, flow_value, std::move(result), std::move(cut_vis_entry)};
 }
 
 DinicMaxFlow::LevelGraph
@@ -174,15 +206,22 @@ std::size_t DinicMaxFlow::BlockingFlow(FlowEdges &flow,
                                        LevelGraph &levels,
                                        const GraphView &view,
                                        const SourceSinkNodes &source_nodes,
-                                       const std::vector<NodeID> &border_sink_nodes) const
+                                       const std::vector<NodeID> &border_sink_nodes,
+                                       visual::CutEntry &cut_vis_entry) const
 {
     // track the number of augmenting paths (which in sum will equal the number of unique border
     // edges) (since our graph is undirected)
     std::size_t flow_increase = 0;
 
-    // augment the flow along a path in the level graph
-    const auto augment_flow = [&flow, &view](const std::vector<NodeID> &path) {
+    cut_vis_entry.augmenting_paths_by_step.resize(cut_vis_entry.augmenting_paths_by_step.size() +
+                                                  1);
 
+    // augment the flow along a path in the level graph
+    const auto augment_flow = [&flow, &view, &cut_vis_entry](const std::vector<NodeID> &path) {
+        const auto to_coordinate = [&](const NodeID nid) { return view.Node(nid).coordinate; };
+        std::vector<util::Coordinate> path_coords(path.size());
+        std::transform(path.begin(), path.end(), path_coords.begin(), to_coordinate);
+        cut_vis_entry.augmenting_paths_by_step.back().push_back(path_coords);
         // add/remove flow edges from the current residual graph
         const auto augment_one = [&flow, &view](const NodeID from, const NodeID to) {
             // check if there is flow in the opposite direction

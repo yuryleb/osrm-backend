@@ -3,6 +3,7 @@
 
 #include "partition/graph_view.hpp"
 #include "partition/recursive_bisection_state.hpp"
+#include "partition/visualisation.hpp"
 
 #include "util/log.hpp"
 #include "util/timing_util.hpp"
@@ -67,13 +68,24 @@ RecursiveBisection::RecursiveBisection(BisectionGraph &bisection_graph_,
     using Feeder = tbb::parallel_do_feeder<TreeNode>;
 
     TIMER_START(bisection);
+    std::mutex lock;
+    visual::Bisection bisection_vis;
+    bisection_vis.algo_by_level.resize(32);
 
     // Bisect graph into two parts. Get partition point and recurse left and right in parallel.
     tbb::parallel_do(begin(forest), end(forest), [&](const TreeNode &node, Feeder &feeder) {
         InertialFlow flow{node.graph};
-        const auto partition = flow.ComputePartition(num_optimizing_cuts, balance, boundary_factor);
+        visual::InertialFlowProgress progress;
+        const auto partition =
+            flow.ComputePartition(num_optimizing_cuts, balance, boundary_factor, progress);
         const auto center = internal_state.ApplyBisection(
             node.graph.Begin(), node.graph.End(), node.depth, partition.flags);
+
+        {
+            // remember progress
+            std::lock_guard<std::mutex> guard{lock};
+            bisection_vis.algo_by_level[node.depth].push_back(progress);
+        }
 
         const auto terminal = [&](const auto &node) {
             const auto maximum_depth = sizeof(BisectionID) * CHAR_BIT;

@@ -3,6 +3,7 @@
 
 #include "partition/dinic_max_flow.hpp"
 #include "partition/graph_view.hpp"
+#include "partition/visualisation.hpp"
 
 #include <unordered_set>
 #include <vector>
@@ -19,7 +20,8 @@ class InertialFlow
 
     DinicMaxFlow::MinCut ComputePartition(const std::size_t num_slopes,
                                           const double balance,
-                                          const double source_sink_rate);
+                                          const double source_sink_rate,
+                                          visual::InertialFlowProgress &progress);
 
   private:
     // Spatially ordered sources and sink ids.
@@ -35,7 +37,10 @@ class InertialFlow
     SpatialOrder MakeSpatialOrder(double ratio, double slope) const;
 
     // Makes n cuts with different spatial orders and returns the best.
-    DinicMaxFlow::MinCut BestMinCut(std::size_t n, double ratio, double balance) const;
+    DinicMaxFlow::MinCut BestMinCut(std::size_t n,
+                                    double ratio,
+                                    double balance,
+                                    visual::InertialFlowProgress &progress) const;
 
     // The subgraph to partition into two parts.
     const GraphView &view;

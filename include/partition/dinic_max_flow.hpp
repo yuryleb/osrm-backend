@@ -2,6 +2,7 @@
 #define OSRM_PARTITION_DINIC_MAX_FLOW_HPP_
 
 #include "partition/graph_view.hpp"
+#include "partition/visualisation.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -26,6 +27,8 @@ class DinicMaxFlow
         std::size_t num_nodes_source;
         std::size_t num_edges;
         std::vector<bool> flags;
+
+        visual::CutEntry cut_vis;
     };
 
     // input parameter storing the set o
@@ -70,7 +73,8 @@ class DinicMaxFlow
                              LevelGraph &levels,
                              const GraphView &view,
                              const SourceSinkNodes &source_nodes,
-                             const std::vector<NodeID> &border_sink_nodes) const;
+                             const std::vector<NodeID> &border_sink_nodes,
+                             visual::CutEntry &cut_vis_entry) const;
 
     // Finds a single augmenting path from a node to the sink side following levels in the level
     // graph. We don't actually remove the edges, so we have to check for increasing level values.
@@ -84,7 +88,7 @@ class DinicMaxFlow
 
     // Builds an actual cut result from a level graph
     MinCut
-    MakeCut(const GraphView &view, const LevelGraph &levels, const std::size_t flow_value) const;
+    MakeCut(const GraphView &view, const LevelGraph &levels, const std::size_t flow_value, visual::CutEntry cut_vis_entry) const;
 };
 
 } // namespace partition

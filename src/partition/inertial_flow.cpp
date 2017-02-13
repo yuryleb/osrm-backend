@@ -23,9 +23,10 @@ InertialFlow::InertialFlow(const GraphView &view_) : view(view_) {}
 
 DinicMaxFlow::MinCut InertialFlow::ComputePartition(const std::size_t num_slopes,
                                                     const double balance,
-                                                    const double source_sink_rate)
+                                                    const double source_sink_rate,
+                                                    visual::InertialFlowProgress &progress)
 {
-    return BestMinCut(num_slopes, source_sink_rate, balance);
+    return BestMinCut(num_slopes, source_sink_rate, balance, progress);
 }
 
 InertialFlow::SpatialOrder InertialFlow::MakeSpatialOrder(const double ratio,
@@ -84,8 +85,10 @@ InertialFlow::SpatialOrder InertialFlow::MakeSpatialOrder(const double ratio,
     return order;
 }
 
-DinicMaxFlow::MinCut
-InertialFlow::BestMinCut(const std::size_t n, const double ratio, const double balance) const
+DinicMaxFlow::MinCut InertialFlow::BestMinCut(const std::size_t n,
+                                              const double ratio,
+                                              const double balance,
+                                              visual::InertialFlowProgress &progress) const
 {
     DinicMaxFlow::MinCut best;
     best.num_edges = -1;
@@ -132,8 +135,11 @@ InertialFlow::BestMinCut(const std::size_t n, const double ratio, const double b
                      balance_delta(cut.num_nodes_source) < balance_delta(best.num_nodes_source)))
                 {
                     best_balance = cut_balance;
+                    progress.best_cut = cut.cut_vis.cut;
                     std::swap(best, cut);
                 }
+
+                progress.cuts_by_slope.push_back(cut.cut_vis);
             }
             // cut gets destroyed here
         }
