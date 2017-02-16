@@ -75,6 +75,16 @@ class CellStorage
                 return *this;
             }
 
+            bool operator==(const ColumnIterator& other) const
+            {
+                return current == other.current;
+            }
+
+            bool operator!=(const ColumnIterator& other) const
+            {
+                return current != other.current;
+            }
+
             int operator-(const ColumnIterator &other) const { return (current - other.current) / offset; }
 
           private:
@@ -237,10 +247,15 @@ class CellStorage
                 });
         }
 
-        auto num_weights = std::accumulate(cells.begin(), cells.end(), 0UL, [](const std::size_t lhs, const CellData &rhs) -> std::size_t {
-            return lhs + rhs.num_source_nodes * rhs.num_destination_nodes;
-        });
-        weights.resize(num_weights, INVALID_EDGE_WEIGHT);
+        // Set weight offsets and calculate total storage size
+        WeightOffset weight_offset = 0;
+        for (auto &cell : cells)
+        {
+            cell.weight_offset = weight_offset;
+            weight_offset += cell.num_source_nodes * cell.num_destination_nodes;
+        }
+
+        weights.resize(weight_offset+1, INVALID_EDGE_WEIGHT);
     }
 
     CellStorage(std::vector<EdgeWeight> weights_,

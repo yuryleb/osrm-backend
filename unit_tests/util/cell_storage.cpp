@@ -4,7 +4,14 @@
 #include "util/cell_storage.hpp"
 #include "util/static_graph.hpp"
 
-#define CHECK_RANGE_SIZE(range, ref) BOOST_CHECK_EQUAL(range.second - range.first, ref)
+#define CHECK_SIZE_RANGE(range, ref) BOOST_CHECK_EQUAL(range.second - range.first, ref)
+#define CHECK_EQUAL_RANGE(range, ref)                                                              \
+    do                                                                                             \
+    {                                                                                              \
+        const auto &lhs = range;                                                                   \
+        const auto &rhs = ref;                                                                     \
+        BOOST_CHECK_EQUAL_COLLECTIONS(lhs.first, lhs.second, rhs.begin(), rhs.end());              \
+    } while (0)
 
 using namespace osrm;
 using namespace osrm::util;
@@ -59,7 +66,73 @@ auto makeGraph(const std::vector<MockEdge> &mock_edges)
 
 BOOST_AUTO_TEST_SUITE(cell_storage_tests)
 
-BOOST_AUTO_TEST_CASE(constructor)
+BOOST_AUTO_TEST_CASE(mutable_cell_storage)
+{
+    // node:                0  1  2  3  4  5  6  7  8  9 10 11
+    std::vector<CellID> l1{{0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5}};
+    std::vector<CellID> l2{{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3}};
+    std::vector<CellID> l3{{0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1}};
+    std::vector<CellID> l4{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+    MockMLP mlp{{l1, l2, l3, l4}};
+
+    std::vector<MockEdge> edges = {
+        // edges sorted into border/internal by level
+        //  level:  (1) (2) (3) (4)
+        {0, 1},   //  i   i   i   i
+        {2, 3},   //  i   i   i   i
+        {3, 7},   //  b   b   b   i
+        {4, 0},   //  b   b   b   i
+        {4, 5},   //  i   i   i   i
+        {5, 6},   //  b   i   i   i
+        {6, 4},   //  b   i   i   i
+        {6, 7},   //  i   i   i   i
+        {7, 11},  //  b   b   i   i
+        {8, 9},   //  i   i   i   i
+        {9, 8},   //  i   i   i   i
+        {10, 11}, //  i   i   i   i
+        {11, 10}  //  i   i   i   i
+    };
+
+    auto graph = makeGraph(edges);
+
+    // test non-const storage
+    CellStorage storage(mlp, graph);
+    auto cell_1_0 = storage.GetCell(1, 0);
+    auto cell_1_1 = storage.GetCell(1, 1);
+    auto cell_1_2 = storage.GetCell(1, 2);
+    auto cell_1_3 = storage.GetCell(1, 3);
+    auto cell_1_4 = storage.GetCell(1, 4);
+    auto cell_1_5 = storage.GetCell(1, 5);
+
+    auto out_range_1_0_0 = cell_1_0.GetOutWeight(0);
+    auto out_range_1_2_4 = cell_1_2.GetOutWeight(4);
+    auto out_range_1_3_6 = cell_1_3.GetOutWeight(6);
+    auto out_range_1_5_11 = cell_1_5.GetOutWeight(11);
+
+    auto in_range_1_1_3 = cell_1_1.GetInWeight(3);
+    auto in_range_1_2_5 = cell_1_2.GetInWeight(5);
+    auto in_range_1_3_7 = cell_1_3.GetInWeight(7);
+    auto in_range_1_5_11 = cell_1_5.GetInWeight(11);
+
+    const auto fill_range = [](auto range, const std::vector<EdgeWeight> &values) {
+        auto iter = range.first;
+        for (auto v : values)
+            *iter++ = v;
+        BOOST_CHECK_EQUAL(range.second, iter);
+    };
+
+    fill_range(out_range_1_0_0, {});
+    fill_range(out_range_1_2_4, {1});
+    fill_range(out_range_1_3_6, {2});
+    fill_range(out_range_1_5_11, {3});
+
+    CHECK_EQUAL_RANGE(in_range_1_1_3, std::vector<EdgeWeight>{});
+    CHECK_EQUAL_RANGE(in_range_1_2_5, std::vector<EdgeWeight>{1});
+    CHECK_EQUAL_RANGE(in_range_1_3_7, std::vector<EdgeWeight>{2});
+    CHECK_EQUAL_RANGE(in_range_1_5_11, std::vector<EdgeWeight>{3});
+}
+
+BOOST_AUTO_TEST_CASE(immutable_cell_storage)
 {
     // node:                0  1  2  3  4  5  6  7  8  9 10 11
     std::vector<CellID> l1{{0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5}};
@@ -125,6 +198,8 @@ BOOST_AUTO_TEST_CASE(constructor)
 
     // test const storage
     const CellStorage const_storage(mlp, graph);
+
+    // TODO: Level 2, 3
     auto const_cell_1_0 = const_storage.GetCell(1, 0);
     auto const_cell_1_1 = const_storage.GetCell(1, 1);
     auto const_cell_1_2 = const_storage.GetCell(1, 2);
@@ -132,112 +207,39 @@ BOOST_AUTO_TEST_CASE(constructor)
     auto const_cell_1_4 = const_storage.GetCell(1, 4);
     auto const_cell_1_5 = const_storage.GetCell(1, 5);
 
-    std::vector<NodeID> ref_sources_cell_1_0 = {0};
-    std::vector<NodeID> ref_sources_cell_1_1 = {};
-    std::vector<NodeID> ref_sources_cell_1_2 = {4};
-    std::vector<NodeID> ref_sources_cell_1_3 = {6};
-    std::vector<NodeID> ref_sources_cell_1_4 = {};
-    std::vector<NodeID> ref_sources_cell_1_5 = {11};
+    CHECK_EQUAL_RANGE(const_cell_1_0.GetSourceNodes(), std::vector<NodeID>{0});
+    CHECK_EQUAL_RANGE(const_cell_1_1.GetSourceNodes(), std::vector<NodeID>{});
+    CHECK_EQUAL_RANGE(const_cell_1_2.GetSourceNodes(), std::vector<NodeID>{4});
+    CHECK_EQUAL_RANGE(const_cell_1_3.GetSourceNodes(), std::vector<NodeID>{6});
+    CHECK_EQUAL_RANGE(const_cell_1_4.GetSourceNodes(), std::vector<NodeID>{});
+    CHECK_EQUAL_RANGE(const_cell_1_5.GetSourceNodes(), std::vector<NodeID>{11});
 
-    std::vector<NodeID> ref_destinations_cell_1_0 = {};
-    std::vector<NodeID> ref_destinations_cell_1_1 = {3};
-    std::vector<NodeID> ref_destinations_cell_1_2 = {5};
-    std::vector<NodeID> ref_destinations_cell_1_3 = {7};
-    std::vector<NodeID> ref_destinations_cell_1_4 = {};
-    std::vector<NodeID> ref_destinations_cell_1_5 = {11};
+    CHECK_EQUAL_RANGE(const_cell_1_0.GetDestinationNodes(), std::vector<NodeID>{});
+    CHECK_EQUAL_RANGE(const_cell_1_1.GetDestinationNodes(), std::vector<NodeID>{3});
+    CHECK_EQUAL_RANGE(const_cell_1_2.GetDestinationNodes(), std::vector<NodeID>{5});
+    CHECK_EQUAL_RANGE(const_cell_1_3.GetDestinationNodes(), std::vector<NodeID>{7});
+    CHECK_EQUAL_RANGE(const_cell_1_4.GetDestinationNodes(), std::vector<NodeID>{});
+    CHECK_EQUAL_RANGE(const_cell_1_5.GetDestinationNodes(), std::vector<NodeID>{11});
 
-    auto sources_cell_1_0 = const_cell_1_0.GetSourceNodes();
-    auto sources_cell_1_1 = const_cell_1_1.GetSourceNodes();
-    auto sources_cell_1_2 = const_cell_1_2.GetSourceNodes();
-    auto sources_cell_1_3 = const_cell_1_3.GetSourceNodes();
-    auto sources_cell_1_4 = const_cell_1_4.GetSourceNodes();
-    auto sources_cell_1_5 = const_cell_1_5.GetSourceNodes();
+    auto out_const_range_1_0_0 = const_cell_1_0.GetOutWeight(0);
+    auto out_const_range_1_2_4 = const_cell_1_2.GetOutWeight(4);
+    auto out_const_range_1_3_6 = const_cell_1_3.GetOutWeight(6);
+    auto out_const_range_1_5_11 = const_cell_1_5.GetOutWeight(11);
 
-    auto destinations_cell_1_0 = const_cell_1_0.GetDestinationNodes();
-    auto destinations_cell_1_1 = const_cell_1_1.GetDestinationNodes();
-    auto destinations_cell_1_2 = const_cell_1_2.GetDestinationNodes();
-    auto destinations_cell_1_3 = const_cell_1_3.GetDestinationNodes();
-    auto destinations_cell_1_4 = const_cell_1_4.GetDestinationNodes();
-    auto destinations_cell_1_5 = const_cell_1_5.GetDestinationNodes();
+    auto in_const_range_1_1_3 = const_cell_1_1.GetInWeight(3);
+    auto in_const_range_1_2_5 = const_cell_1_2.GetInWeight(5);
+    auto in_const_range_1_3_7 = const_cell_1_3.GetInWeight(7);
+    auto in_const_range_1_5_11 = const_cell_1_5.GetInWeight(11);
 
-    BOOST_CHECK_EQUAL_COLLECTIONS(sources_cell_1_0.first,
-                                  sources_cell_1_0.second,
-                                  ref_sources_cell_1_0.begin(),
-                                  ref_sources_cell_1_0.end());
-    BOOST_CHECK_EQUAL_COLLECTIONS(sources_cell_1_1.first,
-                                  sources_cell_1_1.second,
-                                  ref_sources_cell_1_1.begin(),
-                                  ref_sources_cell_1_1.end());
-    BOOST_CHECK_EQUAL_COLLECTIONS(sources_cell_1_2.first,
-                                  sources_cell_1_2.second,
-                                  ref_sources_cell_1_2.begin(),
-                                  ref_sources_cell_1_2.end());
-    BOOST_CHECK_EQUAL_COLLECTIONS(sources_cell_1_3.first,
-                                  sources_cell_1_3.second,
-                                  ref_sources_cell_1_3.begin(),
-                                  ref_sources_cell_1_3.end());
-    BOOST_CHECK_EQUAL_COLLECTIONS(sources_cell_1_4.first,
-                                  sources_cell_1_4.second,
-                                  ref_sources_cell_1_4.begin(),
-                                  ref_sources_cell_1_4.end());
-    BOOST_CHECK_EQUAL_COLLECTIONS(sources_cell_1_5.first,
-                                  sources_cell_1_5.second,
-                                  ref_sources_cell_1_5.begin(),
-                                  ref_sources_cell_1_5.end());
+    CHECK_SIZE_RANGE(out_const_range_1_0_0, 0);
+    CHECK_SIZE_RANGE(out_const_range_1_2_4, 1);
+    CHECK_SIZE_RANGE(out_const_range_1_3_6, 1);
+    CHECK_SIZE_RANGE(out_const_range_1_5_11, 1);
 
-    BOOST_CHECK_EQUAL_COLLECTIONS(destinations_cell_1_0.first,
-                                  destinations_cell_1_0.second,
-                                  ref_destinations_cell_1_0.begin(),
-                                  ref_destinations_cell_1_0.end());
-    BOOST_CHECK_EQUAL_COLLECTIONS(destinations_cell_1_1.first,
-                                  destinations_cell_1_1.second,
-                                  ref_destinations_cell_1_1.begin(),
-                                  ref_destinations_cell_1_1.end());
-    BOOST_CHECK_EQUAL_COLLECTIONS(destinations_cell_1_2.first,
-                                  destinations_cell_1_2.second,
-                                  ref_destinations_cell_1_2.begin(),
-                                  ref_destinations_cell_1_2.end());
-    BOOST_CHECK_EQUAL_COLLECTIONS(destinations_cell_1_3.first,
-                                  destinations_cell_1_3.second,
-                                  ref_destinations_cell_1_3.begin(),
-                                  ref_destinations_cell_1_3.end());
-    BOOST_CHECK_EQUAL_COLLECTIONS(destinations_cell_1_4.first,
-                                  destinations_cell_1_4.second,
-                                  ref_destinations_cell_1_4.begin(),
-                                  ref_destinations_cell_1_4.end());
-    BOOST_CHECK_EQUAL_COLLECTIONS(destinations_cell_1_5.first,
-                                  destinations_cell_1_5.second,
-                                  ref_destinations_cell_1_5.begin(),
-                                  ref_destinations_cell_1_5.end());
-
-    auto out_range_1_0_0 = const_cell_1_0.GetOutWeight(0);
-    auto out_range_1_2_4 = const_cell_1_2.GetOutWeight(4);
-    auto out_range_1_3_6 = const_cell_1_3.GetOutWeight(6);
-    auto out_range_1_5_11 = const_cell_1_5.GetOutWeight(11);
-
-    auto in_range_1_1_3 = const_cell_1_1.GetInWeight(3);
-    auto in_range_1_2_5 = const_cell_1_2.GetInWeight(5);
-    auto in_range_1_3_7 = const_cell_1_3.GetInWeight(7);
-    auto in_range_1_5_11 = const_cell_1_5.GetInWeight(11);
-
-    CHECK_RANGE_SIZE(out_range_1_0_0, 0);
-    CHECK_RANGE_SIZE(out_range_1_2_4, 1);
-    CHECK_RANGE_SIZE(out_range_1_3_6, 1);
-    CHECK_RANGE_SIZE(out_range_1_5_11, 1);
-
-    CHECK_RANGE_SIZE(in_range_1_1_3, 0);
-    CHECK_RANGE_SIZE(in_range_1_2_5, 1);
-    CHECK_RANGE_SIZE(in_range_1_3_7, 1);
-    CHECK_RANGE_SIZE(in_range_1_5_11, 1);
-
-    // test non-const storage
-    //const CellStorage storage(mlp, graph);
-    //auto cell_1_0 = storage.GetCell(1, 0);
-    //auto cell_1_1 = storage.GetCell(1, 1);
-    //auto cell_1_2 = storage.GetCell(1, 2);
-    //auto cell_1_3 = storage.GetCell(1, 3);
-    //auto cell_1_4 = storage.GetCell(1, 4);
-    //auto cell_1_5 = storage.GetCell(1, 5);
+    CHECK_SIZE_RANGE(in_const_range_1_1_3, 0);
+    CHECK_SIZE_RANGE(in_const_range_1_2_5, 1);
+    CHECK_SIZE_RANGE(in_const_range_1_3_7, 1);
+    CHECK_SIZE_RANGE(in_const_range_1_5_11, 1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
