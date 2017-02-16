@@ -23,6 +23,8 @@ class MultiLevelPartition
         virtual LevelID GetHighestDifferentLevel(NodeID first, NodeID second) const = 0;
 
         virtual std::size_t GetNumberOfLevels() const = 0;
+
+        virtual std::size_t GetNumberOfCells(LevelID level) const = 0;
 };
 
 }

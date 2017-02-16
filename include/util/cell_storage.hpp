@@ -4,8 +4,10 @@
 #include "util/assert.hpp"
 #include "util/multi_level_partition.hpp"
 #include "util/typedefs.hpp"
+#include "util/for_each_range.hpp"
 
 #include <algorithm>
+#include <numeric>
 #include <utility>
 #include <vector>
 
@@ -23,44 +25,109 @@ class CellStorage
     using SourceIndex = std::uint32_t;
     using DestinationIndex = std::uint32_t;
 
+    static constexpr auto INVALID_WEIGHT_OFFSET = std::numeric_limits<WeightOffset>::max();
+    static constexpr auto INVALID_BOUNDARY_OFFSET = std::numeric_limits<BoundaryOffset>::max();
+
+  private:
     struct CellData
     {
-        WeightOffset weight_offset;
-        BoundaryOffset source_boundary_offset;
-        BoundaryOffset destination_boundary_offset;
-        BoundarySize num_source_nodes;
-        BoundarySize num_destination_nodes;
+        WeightOffset weight_offset = INVALID_WEIGHT_OFFSET;
+        BoundaryOffset source_boundary_offset = INVALID_BOUNDARY_OFFSET;
+        BoundaryOffset destination_boundary_offset = INVALID_BOUNDARY_OFFSET;
+        BoundarySize num_source_nodes = 0;
+        BoundarySize num_destination_nodes = 0;
     };
 
-    // R/W View into one cell
-    class Cell
+    // Implementation of the cell view. We need a template parameter here
+    // because we need to derive a read-only and read-write view from this.
+    template <typename WeightPtrT> class CellImpl
     {
       private:
+        using WeightValueT = EdgeWeight;
+        using WeightRefT = decltype(*WeightPtrT());
         BoundarySize num_source_nodes;
         BoundarySize num_destination_nodes;
 
-        EdgeWeight *const weights;
+        WeightPtrT const weights;
         const NodeID *const source_boundary;
         const NodeID *const destination_boundary;
 
-        using CellRowIterator = EdgeWeight *;
-        class CellColumnIterator : public std::iterator<std::random_access_iterator_tag, EdgeWeight>
+        using RowIterator = WeightPtrT;
+        class ColumnIterator : public std::iterator<std::random_access_iterator_tag, EdgeWeight>
         {
-            explicit CellColumnIterator(EdgeWeight *begin, std::size_t row_length)
+          public:
+            explicit ColumnIterator(WeightPtrT begin, std::size_t row_length)
                 : current(begin), offset(row_length)
             {
             }
 
+            WeightRefT operator*() const { return *current; }
+
+            ColumnIterator &operator++()
+            {
+                current += offset;
+                return *this;
+            }
+
+            ColumnIterator &operator+=(int amount)
+            {
+                current += offset * amount;
+                return *this;
+            }
+
+            int operator-(const ColumnIterator &other) const { return (current - other.current) / offset; }
+
           private:
-            EdgeWeight *current;
+            WeightPtrT current;
             std::size_t offset;
         };
 
+        std::size_t GetRow(NodeID node) const
+        {
+            return std::find(source_boundary, source_boundary + num_source_nodes, node) -
+                   source_boundary;
+        }
+        std::size_t GetColumn(NodeID node) const
+        {
+            return std::find(
+                       destination_boundary, destination_boundary + num_destination_nodes, node) -
+                   destination_boundary;
+        }
+
       public:
-        Cell(const CellData &data,
-             EdgeWeight *const all_weight,
-             const NodeID *const all_sources,
-             const NodeID *const all_destinations)
+        std::pair<RowIterator, RowIterator> GetOutWeight(NodeID node) const
+        {
+            auto row = GetRow(node);
+            auto begin = weights + num_destination_nodes * row;
+            auto end = begin + num_destination_nodes;
+            return std::make_pair(begin, end);
+        }
+
+        std::pair<ColumnIterator, ColumnIterator> GetInWeight(NodeID node) const
+        {
+            auto column = GetColumn(node);
+            auto begin = ColumnIterator{weights + column, num_destination_nodes};
+            auto end =
+                ColumnIterator{weights + column + num_source_nodes * num_destination_nodes,
+                               num_destination_nodes};
+            return std::make_pair(begin, end);
+        }
+
+        auto GetSourceNodes() const
+        {
+            return std::make_pair(source_boundary, source_boundary + num_source_nodes);
+        }
+
+        auto GetDestinationNodes() const
+        {
+            return std::make_pair(destination_boundary,
+                                  destination_boundary + num_destination_nodes);
+        }
+
+        CellImpl(const CellData &data,
+                 WeightPtrT const all_weight,
+                 const NodeID *const all_sources,
+                 const NodeID *const all_destinations)
             : num_source_nodes{data.num_source_nodes},
               num_destination_nodes{data.num_destination_nodes},
               weights{all_weight + data.weight_offset},
@@ -70,15 +137,33 @@ class CellStorage
         }
     };
 
+    inline std::size_t LevelIDToIndex(LevelID level) const { return level-1; }
+
+  public:
+    using Cell = CellImpl<EdgeWeight *>;
+    using ConstCell = CellImpl<const EdgeWeight *>;
+
     template <typename GraphT>
     CellStorage(const MultiLevelPartition &partition, const GraphT &base_graph)
     {
-        for (LevelID level = 0; level < partition.GetNumberOfLevels(); ++level)
+        // pre-allocate storge for CellData so we can have random access to it by cell id
+        unsigned number_of_cells = 0;
+        for (LevelID level = 1u; level < partition.GetNumberOfLevels(); ++level)
         {
+            level_to_cell_offset.push_back(number_of_cells);
+            number_of_cells += partition.GetNumberOfCells(level);
+        }
+        level_to_cell_offset.push_back(number_of_cells);
+        cells.resize(number_of_cells);
+
+        for (LevelID level = 1u; level < partition.GetNumberOfLevels(); ++level)
+        {
+            auto level_offset = level_to_cell_offset[LevelIDToIndex(level)];
+
             std::vector<std::pair<CellID, NodeID>> level_source_boundary;
             std::vector<std::pair<CellID, NodeID>> level_destination_boundary;
 
-            for (auto node = 0; node < base_graph.NumberOfNodes(); ++node)
+            for (auto node = 0u; node < base_graph.GetNumberOfNodes(); ++node)
             {
                 const CellID cell_id = partition.GetCell(level, node);
                 bool is_source_node = false;
@@ -88,12 +173,13 @@ class CellStorage
                 for (auto edge = base_graph.BeginEdges(node); edge < base_graph.EndEdges(node);
                      ++edge)
                 {
-                    auto other = base_graph.GetDestination(edge);
+                    auto other = base_graph.GetTarget(edge);
+                    const auto &data = base_graph.GetEdgeData(edge);
+
                     is_boundary_node |= partition.GetCell(level, other) != cell_id;
-                    is_source_node |= partition.GetCell(level, other) == cell_id &&
-                                      base_graph.GetData(edge).forward;
-                    is_destination_node |= partition.GetCell(level, other) == cell_id &&
-                                           base_graph.GetData(edge).backward;
+                    is_source_node |= partition.GetCell(level, other) == cell_id && data.forward;
+                    is_destination_node |=
+                        partition.GetCell(level, other) == cell_id && data.backward;
                 }
 
                 if (is_boundary_node)
@@ -105,45 +191,56 @@ class CellStorage
                     // a partition that contains boundary nodes that have no arcs going into
                     // the cells or coming out of it is invalid. These nodes should be reassigned
                     // to a different cell.
-                    BOOST_ASSERT_MSG(is_source_node || is_destination_node,
-                                "Node needs to either have incoming or outgoing edges in cell");
+                    BOOST_ASSERT_MSG(
+                        is_source_node || is_destination_node,
+                        "Node needs to either have incoming or outgoing edges in cell");
                 }
             }
 
             std::sort(level_source_boundary.begin(), level_source_boundary.end());
-            for (auto source_iter = level_source_boundary.begin(),
-                      source_end = level_source_boundary.end();
-                 source_iter != source_end;
-                 ++source_iter)
-            {
-                const auto cell_id = source_iter->first;
-                cells[cell_id].source_boundary_offset = source_boundary.size();
-                while (source_iter != source_end && source_iter->first == cell_id)
-                {
-                    source_boundary.push_back(source_iter->second);
-                    source_iter++;
-                }
-                cells[cell_id].num_source_nodes =
-                    source_boundary.size() - cells[cell_id].source_boundary_offset;
-            }
-
             std::sort(level_destination_boundary.begin(), level_destination_boundary.end());
-            for (auto destination_iter = level_destination_boundary.begin(),
-                      destination_end = level_destination_boundary.end();
-                 destination_iter != destination_end;
-                 ++destination_iter)
-            {
-                const auto cell_id = destination_iter->first;
-                cells[cell_id].destination_boundary_offset = destination_boundary.size();
-                while (destination_iter != destination_end && destination_iter->first == cell_id)
-                {
-                    destination_boundary.push_back(destination_iter->second);
-                    destination_iter++;
-                }
-                cells[cell_id].num_destination_nodes =
-                    destination_boundary.size() - cells[cell_id].destination_boundary_offset;
-            }
+
+            util::for_each_range(
+                level_source_boundary.begin(),
+                level_source_boundary.end(),
+                [&](auto begin, auto end) {
+                    BOOST_ASSERT(std::distance(begin, end) > 0);
+
+                    const auto cell_id = begin->first;
+                    BOOST_ASSERT(level_offset + cell_id < cells.size());
+                    auto &cell = cells[level_offset + cell_id];
+                    cell.num_source_nodes = std::distance(begin, end);
+                    cell.source_boundary_offset = source_boundary.size();
+
+                    std::transform(begin,
+                                   end,
+                                   std::back_inserter(source_boundary),
+                                   [](const auto &cell_and_node) { return cell_and_node.second; });
+                });
+
+            util::for_each_range(
+                level_destination_boundary.begin(),
+                level_destination_boundary.end(),
+                [&](auto begin, auto end) {
+                    BOOST_ASSERT(std::distance(begin, end) > 0);
+
+                    const auto cell_id = begin->first;
+                    BOOST_ASSERT(level_offset + cell_id < cells.size());
+                    auto &cell = cells[level_offset + cell_id];
+                    cell.num_destination_nodes = std::distance(begin, end);
+                    cell.destination_boundary_offset = destination_boundary.size();
+
+                    std::transform(begin,
+                                   end,
+                                   std::back_inserter(destination_boundary),
+                                   [](const auto &cell_and_node) { return cell_and_node.second; });
+                });
         }
+
+        auto num_weights = std::accumulate(cells.begin(), cells.end(), 0UL, [](const std::size_t lhs, const CellData &rhs) -> std::size_t {
+            return lhs + rhs.num_source_nodes * rhs.num_destination_nodes;
+        });
+        weights.resize(num_weights, INVALID_EDGE_WEIGHT);
     }
 
     CellStorage(std::vector<EdgeWeight> weights_,
@@ -157,9 +254,16 @@ class CellStorage
     {
     }
 
-    Cell getCell(LevelID level, CellID id) const
+    ConstCell GetCell(LevelID level, CellID id) const
     {
-        auto offset = level_to_cell_offset[level];
+        auto offset = level_to_cell_offset[LevelIDToIndex(level)];
+        return ConstCell{
+            cells[offset + id], &weights[0], &source_boundary[0], &destination_boundary[0]};
+    }
+
+    Cell GetCell(LevelID level, CellID id)
+    {
+        auto offset = level_to_cell_offset[LevelIDToIndex(level)];
         return Cell{cells[offset + id], &weights[0], &source_boundary[0], &destination_boundary[0]};
     }
 
