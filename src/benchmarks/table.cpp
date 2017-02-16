@@ -17,6 +17,7 @@
 #include <iostream>
 #include <string>
 #include <utility>
+#include <random>
 
 #include <cstdlib>
 
@@ -54,10 +55,6 @@ int main(int argc, const char *argv[]) try
     // Routing machine with several services (such as Route, Table, Nearest, Trip, Match)
     OSRM osrm{config};
 
-    // Shuffle the coordinate list randomly, then we'll simply use the first N coordinates
-    // to build our random table queries
-    std::random_shuffle(coordinates.begin(), coordinates.end());
-
     auto runtest = [&](const int coordcount) -> void {
         TableParameters params;
         for (int i = 0; i < coordcount; i++)
@@ -65,10 +62,18 @@ int main(int argc, const char *argv[]) try
             params.coordinates.push_back(coordinates[i]);
         }
 
+        auto r = std::mt19937();
+
         TIMER_START(routes);
         auto NUM = 10;
         for (int i = 0; i < NUM; ++i)
         {
+            TableParameters params;
+            // Select a random sample
+            for (int i = 0; i < coordcount; i++)
+            {
+                params.coordinates.push_back(coordinates[r() % coordinates.size()]);
+            }
             json::Object result;
             const auto rc = osrm.Table(params, result);
             if (rc != Status::Ok)
@@ -81,7 +86,7 @@ int main(int argc, const char *argv[]) try
                   << std::endl;
     };
 
-    std::cout << "Coordinates,Duration in seconds" << std::endl;
+    std::cout << "Coordinates,Duration" << std::endl;
     for (int i = 0; i < 3000; i += 10)
     {
         runtest(i);
