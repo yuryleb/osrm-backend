@@ -110,6 +110,7 @@ RecursiveBisection::RecursiveBisection(BisectionGraph &bisection_graph_,
     TIMER_STOP(bisection);
 
     util::Log() << "Full bisection done in " << TIMER_SEC(bisection) << "s";
+    bisection_vis.Output();
 }
 
 const std::vector<BisectionID> &RecursiveBisection::BisectionIDs() const

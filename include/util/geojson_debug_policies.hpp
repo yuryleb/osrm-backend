@@ -1,6 +1,7 @@
 #ifndef OSRM_GEOJSON_DEBUG_POLICIES
 #define OSRM_GEOJSON_DEBUG_POLICIES
 
+#include <string>
 #include <vector>
 
 #include "extractor/query_node.hpp"
@@ -51,6 +52,20 @@ struct CoordinateVectorToMultiPoint
     util::json::Object operator()(const std::vector<util::Coordinate> &coordinates,
                                   const boost::optional<json::Object> &properties = {}) const;
 };
+
+inline json::Object makeProperty(const std::string &name, const int value)
+{
+    util::json::Object result;
+    result.values[name] = util::json::Number(value);
+	return result;
+}
+
+inline json::Object makeProperty(const std::string &name, const std::string &value)
+{
+    util::json::Object result;
+    result.values[name] = util::json::String(value);
+    return result;
+}
 
 } /* namespace util */
 } /* namespace osrm */

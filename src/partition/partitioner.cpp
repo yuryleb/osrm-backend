@@ -135,6 +135,8 @@ int Partitioner::Run(const PartitionConfig &config)
                                            config.num_optimizing_cuts,
                                            config.small_component_size);
 
+    return 0;
+#if 0
     LogStatistics(config.compressed_node_based_graph_path.string(),
                   recursive_bisection.BisectionIDs());
 
@@ -182,6 +184,7 @@ int Partitioner::Run(const PartitionConfig &config)
     }
 
     return 0;
+#endif
 }
 
 } // namespace partition

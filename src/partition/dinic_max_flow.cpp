@@ -36,6 +36,7 @@ DinicMaxFlow::MinCut DinicMaxFlow::operator()(const GraphView &view,
                                               const SourceSinkNodes &source_nodes,
                                               const SourceSinkNodes &sink_nodes) const
 {
+    BOOST_ASSERT(!source_nodes.empty() && !sink_nodes.empty());
     visual::CutEntry cut_vis_entry;
     cut_vis_entry.source_nodes.resize(source_nodes.size());
     cut_vis_entry.sink_nodes.resize(sink_nodes.size());

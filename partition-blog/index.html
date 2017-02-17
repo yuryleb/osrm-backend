@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='utf-8' />
+  <title>Partition Maps</title>
+  <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+  <script src='https://api.mapbox.com/mapbox-gl-js/v0.26.0/mapbox-gl.js'></script>
+  <link href='https://api.mapbox.com/mapbox-gl-js/v0.26.0/mapbox-gl.css' rel='stylesheet' />
+  <style>
+      body { margin:0; padding:0; }
+      #map { position:absolute; top:0; bottom:0; width:100%; }
+  </style>
+</head>
+<body>
+
+<script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-supported/v1.2.0/mapbox-gl-supported.js'></script>
+
+<div id='map'></div>
+
+<script>
+
+mapboxgl.accessToken = 'pk.eyJ1IjoiZGFuaWVsamgiLCJhIjoiY2l1NXB2NmFtMDAxdTJ6cDg1anlkeWpwMSJ9.GtchJ8LqryQsfvWOMQbtyg';
+
+var styles = [
+  'mapbox://styles/mapbox/streets-v9?optimize=true',
+  'mapbox://styles/mapbox/satellite-streets-v9?optimize=true',
+  'mapbox://styles/mapbox/outdoors-v9?optimize=true',
+  'mapbox://styles/mapbox/satellite-v9?optimize=true',
+  'mapbox://styles/mapbox/light-v9?optimize=true',
+  'mapbox://styles/mapbox/dark-v9?optimize=true'];
+
+var currentStyleId = 5
+
+var levels = [1,2,3,4];//,5,6,7,8,9,10,11,12,13]
+var rotations = [2,3,4,5,6,7,8,9,10,0];
+var steps = [0,1,2,3,4,5,6,7,8,9,10];//,11,12,13];
+
+var current_step = 0
+var current_rotation = 0
+var current_level = 0
+var current_frame = 0
+
+function show(map,level,rotation,step)
+{
+    console.log("Showing " + level + " " + rotation + " " + step )
+    if( rotation !== 0 )
+    {
+        map.setLayoutProperty('source_' + level + '_' + rotation, 'visibility', 'visible')
+        map.setLayoutProperty('sink_' + level + '_' + rotation, 'visibility', 'visible')
+    }
+    if( rotation != 0 )
+    {
+        map.setLayoutProperty('augment_' + level + '_' + rotation + '_' + step, 'visibility', 'visible')
+    }
+    if( step == steps[steps.length-1] )
+    {
+        map.setLayoutProperty('cut_' + level + '_' + rotation, 'visibility', 'visible')
+    }
+}
+
+function hide(map,level,rotation,step)
+{
+    console.log("Hiding " + level + " " + rotation + " " + step )
+    if( rotation !== 0 )
+    {
+        map.setLayoutProperty('source_' + level + '_' + rotation, 'visibility', 'none')
+        map.setLayoutProperty('sink_' + level + '_' + rotation, 'visibility', 'none')
+    }
+    if( rotation != 0 )
+    {
+        map.setLayoutProperty('augment_' + level + '_' + rotation + '_' + step, 'visibility', 'none')
+    }
+    if( step == steps[steps.length-1] )
+    {
+        map.setLayoutProperty('cut_' + level + '_' + rotation, 'visibility', 'none')
+    }
+}
+
+function padLeft(num)
+{
+    if( num < 10 )
+        return '00' + num;
+    if( num < 100 )
+        return '0' + num;
+    return num;
+}
+
+function makeScene(map,level,rotation,step)
+{
+    console.log("Scene: " + level + " " + rotation + " " + step)
+    if( step == 0 && rotation !== 0 )
+    {
+        map.addLayer({
+            "id": "source_" + level + "_" + rotation,
+            "type": "circle",
+            "source": "sources",
+            "paint": {
+                "circle-radius": 4,
+                "circle-color": "#56b881"
+            },
+            "filter": ["all",
+                        ["==", "level", level],
+                        ["==", "rotation", rotation]
+                      ]
+        }, 'source-vertices');
+
+        map.addLayer({
+            "id": "sink_" + level + "_" + rotation,
+            "type": "circle",
+            "source": "sinks",
+            "paint": {
+                "circle-radius": 4,
+                "circle-color": "#3887be"
+            },
+            "filter": ["all",
+                        ["==", "level", level],
+                        ["==", "rotation", rotation]
+                      ]
+        }, 'sink-vertices');
+    }
+
+	map.addLayer({
+        "id": "augment_" + level + "_" + rotation + "_" + step,
+        "type": "line",
+        "source": "augmentations",
+        "paint": {
+            "line-color": "#fff",
+			"line-width": 3
+        },
+        "filter": ["all",
+                    ["==", "level", level],
+                    ["==", "rotation", rotation],
+                    ["==", "step", step]
+                  ]
+    }, 'augmentation');
+
+    if( step == 0 )
+    {
+        map.addLayer({
+            "id": "cut_" + level + "_" + rotation,
+            "type": "circle",
+            "source": "cuts",
+            "paint": {
+                "circle-color": "#8a8acb",
+                "circle-radius": 4
+            },
+            "filter": ["all",
+                        ["==", "level", level],
+                        ["==", "rotation", rotation]
+                      ]
+        }, 'cut-vertices');
+    }
+
+    hide(map,level,rotation,step);
+}
+
+ function advance()
+ {
+    var timeout = 3000
+    hide(map,levels[current_level],rotations[current_rotation],steps[current_step])
+    if( rotations[current_rotation] == 0 )
+    {
+		current_rotation = 0
+		current_level = current_level + 1
+		if( current_level == levels.length )
+			current_level = 0
+    }
+	else
+	{
+		current_step = current_step + 1
+		if( current_step == steps.length )
+		{
+			current_step = 0
+			current_rotation = current_rotation + 1
+			if( current_rotation == rotations.length )
+			{
+				current_rotation = 0
+				current_level = current_level + 1
+                timeout = 15000
+				if( current_level == levels.length )
+                {
+                    return;
+                }
+			}
+		}
+	}
+    show(map,levels[current_level],rotations[current_rotation],steps[current_step])
+    var filename = "frame_" + padLeft(current_frame) + ".png"
+    current_frame = current_frame + 1
+	
+	setTimeout(function(map,filename){
+        var image = map.getCanvas().toDataURL("image/png").replace("image/png", "image/octet-stream");
+        var link = document.createElement('a');
+        link.download = filename;
+        link.href = image
+        link.click();
+    },timeout,map,filename);
+    setTimeout(advance,timeout + 500)
+  }
+
+
+if (!mapboxgl.supported()) {
+  console.log('Not Supported');
+} else {
+  var map = new mapboxgl.Map({
+      container: 'map',
+      style: styles[currentStyleId],
+      center: [13.4, 52.51],
+      hash: true,
+      zoom: 10,
+      preserveDrawingBuffer: true
+  });
+
+  map.addControl(new mapboxgl.GeolocateControl({position: 'top-right'}));
+  map.addControl(new mapboxgl.NavigationControl({position: 'top-left'}));
+
+  map.on('load', function () {
+    map.setLayoutProperty('country-label-lg', 'text-field', '{name_de}');
+
+    map.addSource('cuts', {
+                  "type": "geojson",
+                  "data": "best_cuts.geojson"
+                 });
+
+    map.addSource('sources', {
+                  "type": "geojson",
+                  "data": "sources.geojson"
+                 });
+
+    map.addSource('sinks', {
+                  "type": "geojson",
+                  "data": "sinks.geojson"
+                 });
+
+    map.addSource('augmentations', {
+                  "type": "geojson",
+                  "data": "augmentations.geojson"
+                 });
+
+    for( var level in levels )
+    {
+        console.log("Making Level " + levels[level])
+        for( var rotation in rotations )
+        {
+            if( rotations[rotation] !== 0 )
+            {
+                for( var step in steps )
+                {
+                    makeScene(map,levels[level],rotations[rotation],steps[step])
+                }
+            }
+        }
+    }
+
+    show(map,levels[current_level],rotations[current_rotation],steps[current_step])
+    advance();
+
+    map.setLight({
+      'anchor': 'viewport',
+      'color': '#faf0e6',
+      'intensity': 0.5
+    });
+
+    setTimeout( advance, 30000 )
+
+  });
+
+
+}
+
+</script>
+
+</body>
+</html>
