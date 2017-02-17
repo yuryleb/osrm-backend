@@ -68,6 +68,13 @@ BOOST_AUTO_TEST_SUITE(cell_storage_tests)
 
 BOOST_AUTO_TEST_CASE(mutable_cell_storage)
 {
+    const auto fill_range = [](auto range, const std::vector<EdgeWeight> &values) {
+        auto iter = range.begin();
+        for (auto v : values)
+            *iter++ = v;
+        BOOST_CHECK_EQUAL(range.end(), iter);
+    };
+
     // node:                0  1  2  3  4  5  6  7  8  9 10 11
     std::vector<CellID> l1{{0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5}};
     std::vector<CellID> l2{{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3}};
@@ -97,12 +104,16 @@ BOOST_AUTO_TEST_CASE(mutable_cell_storage)
 
     // test non-const storage
     CellStorage storage(mlp, graph);
+
+    // Level 1
     auto cell_1_0 = storage.GetCell(1, 0);
     auto cell_1_1 = storage.GetCell(1, 1);
     auto cell_1_2 = storage.GetCell(1, 2);
     auto cell_1_3 = storage.GetCell(1, 3);
     auto cell_1_4 = storage.GetCell(1, 4);
     auto cell_1_5 = storage.GetCell(1, 5);
+
+    (void) cell_1_4; // does not have border nodes
 
     auto out_range_1_0_0 = cell_1_0.GetOutWeight(0);
     auto out_range_1_2_4 = cell_1_2.GetOutWeight(4);
@@ -114,13 +125,6 @@ BOOST_AUTO_TEST_CASE(mutable_cell_storage)
     auto in_range_1_3_7 = cell_1_3.GetInWeight(7);
     auto in_range_1_5_11 = cell_1_5.GetInWeight(11);
 
-    const auto fill_range = [](auto range, const std::vector<EdgeWeight> &values) {
-        auto iter = range.begin();
-        for (auto v : values)
-            *iter++ = v;
-        BOOST_CHECK_EQUAL(range.end(), iter);
-    };
-
     fill_range(out_range_1_0_0, {});
     fill_range(out_range_1_2_4, {1});
     fill_range(out_range_1_3_6, {2});
@@ -130,6 +134,52 @@ BOOST_AUTO_TEST_CASE(mutable_cell_storage)
     CHECK_EQUAL_RANGE(in_range_1_2_5, std::vector<EdgeWeight>{1});
     CHECK_EQUAL_RANGE(in_range_1_3_7, std::vector<EdgeWeight>{2});
     CHECK_EQUAL_RANGE(in_range_1_5_11, std::vector<EdgeWeight>{3});
+
+    // Level 2
+    auto cell_2_0 = storage.GetCell(2, 0);
+    auto cell_2_1 = storage.GetCell(2, 1);
+    auto cell_2_2 = storage.GetCell(2, 2);
+    auto cell_2_3 = storage.GetCell(2, 3);
+
+    (void) cell_2_2; // does not have border nodes
+
+    auto out_range_2_0_0  = cell_2_0.GetOutWeight(0);
+    auto out_range_2_1_4  = cell_2_1.GetOutWeight(4);
+    auto out_range_2_3_11 = cell_2_3.GetOutWeight(11);
+
+    auto in_range_2_0_3 = cell_2_0.GetInWeight(3);
+    auto in_range_2_1_4 = cell_2_1.GetInWeight(4);
+    auto in_range_2_1_7 = cell_2_1.GetInWeight(7);
+    auto in_range_2_3_11 = cell_2_3.GetInWeight(11);
+
+    fill_range(out_range_2_0_0, {1});
+    fill_range(out_range_2_1_4, {2, 3});
+    fill_range(out_range_2_3_11, {4});
+
+    CHECK_EQUAL_RANGE(in_range_2_0_3, std::vector<EdgeWeight>{1});
+    CHECK_EQUAL_RANGE(in_range_2_1_4, std::vector<EdgeWeight>{2});
+    CHECK_EQUAL_RANGE(in_range_2_1_7, std::vector<EdgeWeight>{3});
+    CHECK_EQUAL_RANGE(in_range_2_3_11, std::vector<EdgeWeight>{4});
+
+    // Level 3
+    auto cell_3_0 = storage.GetCell(3, 0);
+    auto cell_3_1 = storage.GetCell(3, 1);
+
+    auto out_range_3_0_0 = cell_3_0.GetOutWeight(0);
+    auto out_range_3_1_4 = cell_3_1.GetOutWeight(4);
+    auto out_range_3_1_7 = cell_3_1.GetOutWeight(7);
+
+    auto in_range_3_0_3 = cell_3_0.GetInWeight(3);
+    auto in_range_3_1_4 = cell_3_1.GetInWeight(4);
+    auto in_range_3_1_7 = cell_3_1.GetInWeight(7);
+
+    fill_range(out_range_3_0_0, {1});
+    fill_range(out_range_3_1_4, {2, 3});
+    fill_range(out_range_3_1_7, {4, 5});
+
+    CHECK_EQUAL_RANGE(in_range_3_0_3, std::vector<EdgeWeight>({1}));
+    CHECK_EQUAL_RANGE(in_range_3_1_4, std::vector<EdgeWeight>({2, 4}));
+    CHECK_EQUAL_RANGE(in_range_3_1_7, std::vector<EdgeWeight>({3, 5}));
 }
 
 BOOST_AUTO_TEST_CASE(immutable_cell_storage)
@@ -239,6 +289,7 @@ BOOST_AUTO_TEST_CASE(immutable_cell_storage)
     CHECK_SIZE_RANGE(in_const_range_1_3_7, 1);
     CHECK_SIZE_RANGE(in_const_range_1_5_11, 1);
 
+    // Level 2
     auto const_cell_2_0 = const_storage.GetCell(2, 0);
     auto const_cell_2_1 = const_storage.GetCell(2, 1);
     auto const_cell_2_2 = const_storage.GetCell(2, 2);
@@ -254,6 +305,25 @@ BOOST_AUTO_TEST_CASE(immutable_cell_storage)
     CHECK_EQUAL_RANGE(const_cell_2_2.GetDestinationNodes(), std::vector<NodeID>({}));
     CHECK_EQUAL_RANGE(const_cell_2_3.GetDestinationNodes(), std::vector<NodeID>({11}));
 
+    auto out_const_range_2_0_0 = const_cell_2_0.GetOutWeight(0);
+    auto out_const_range_2_1_4 = const_cell_2_1.GetOutWeight(4);
+    auto out_const_range_2_3_11 = const_cell_2_3.GetOutWeight(11);
+
+    auto in_const_range_2_0_3 = const_cell_2_0.GetInWeight(3);
+    auto in_const_range_2_1_4 = const_cell_2_1.GetInWeight(4);
+    auto in_const_range_2_1_7 = const_cell_2_1.GetInWeight(7);
+    auto in_const_range_2_3_7 = const_cell_2_3.GetInWeight(11);
+
+    CHECK_SIZE_RANGE(out_const_range_2_0_0, 1);
+    CHECK_SIZE_RANGE(out_const_range_2_1_4, 2);
+    CHECK_SIZE_RANGE(out_const_range_2_3_11, 1);
+
+    CHECK_SIZE_RANGE(in_const_range_2_0_3, 1);
+    CHECK_SIZE_RANGE(in_const_range_2_1_4, 1);
+    CHECK_SIZE_RANGE(in_const_range_2_1_7, 1);
+    CHECK_SIZE_RANGE(in_const_range_2_3_7, 1);
+
+    // Level 3
     auto const_cell_3_0 = const_storage.GetCell(3, 0);
     auto const_cell_3_1 = const_storage.GetCell(3, 1);
 
@@ -262,6 +332,22 @@ BOOST_AUTO_TEST_CASE(immutable_cell_storage)
 
     CHECK_EQUAL_RANGE(const_cell_3_0.GetDestinationNodes(), std::vector<NodeID>({3}));
     CHECK_EQUAL_RANGE(const_cell_3_1.GetDestinationNodes(), std::vector<NodeID>({4, 7}));
+
+    auto out_const_range_3_0_0 = const_cell_3_0.GetOutWeight(0);
+    auto out_const_range_3_1_4 = const_cell_3_1.GetOutWeight(4);
+    auto out_const_range_3_1_7 = const_cell_3_1.GetOutWeight(7);
+
+    auto in_const_range_3_0_3 = const_cell_3_0.GetInWeight(3);
+    auto in_const_range_3_1_4 = const_cell_3_1.GetInWeight(4);
+    auto in_const_range_3_1_7 = const_cell_3_1.GetInWeight(7);
+
+    CHECK_SIZE_RANGE(out_const_range_3_0_0, 1);
+    CHECK_SIZE_RANGE(out_const_range_3_1_4, 2);
+    CHECK_SIZE_RANGE(out_const_range_3_1_7, 2);
+
+    CHECK_SIZE_RANGE(in_const_range_3_0_3, 1);
+    CHECK_SIZE_RANGE(in_const_range_3_1_4, 2);
+    CHECK_SIZE_RANGE(in_const_range_3_1_7, 2);
 
     auto const_cell_4_0 = const_storage.GetCell(4, 0);
     CHECK_EQUAL_RANGE(const_cell_4_0.GetSourceNodes(), std::vector<NodeID>({}));
