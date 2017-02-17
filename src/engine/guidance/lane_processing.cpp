@@ -10,9 +10,6 @@
 #include <utility>
 
 using osrm::extractor::guidance::TurnInstruction;
-namespace TurnType = osrm::extractor::guidance::TurnType;
-namespace DirectionModifier = osrm::extractor::guidance::DirectionModifier;
-
 using osrm::extractor::guidance::isLeftTurn;
 using osrm::extractor::guidance::isRightTurn;
 
