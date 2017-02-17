@@ -40,11 +40,11 @@ class CellStorage
 
     // Implementation of the cell view. We need a template parameter here
     // because we need to derive a read-only and read-write view from this.
-    template <typename WeightPtrT> class CellImpl
+    template <typename WeightValueT> class CellImpl
     {
       private:
-        using WeightValueT = EdgeWeight;
-        using WeightRefT = decltype(*WeightPtrT());
+        using WeightPtrT = WeightValueT*;
+        using WeightRefT = WeightValueT&;
         BoundarySize num_source_nodes;
         BoundarySize num_destination_nodes;
 
@@ -57,7 +57,7 @@ class CellStorage
         {
           public:
             explicit ColumnIterator(WeightPtrT begin, std::size_t row_length)
-                : current(begin), offset(row_length)
+                : current(begin), stride(row_length)
             {
             }
 
@@ -65,13 +65,13 @@ class CellStorage
 
             ColumnIterator &operator++()
             {
-                current += offset;
+                current += stride;
                 return *this;
             }
 
             ColumnIterator &operator+=(int amount)
             {
-                current += offset * amount;
+                current += stride * amount;
                 return *this;
             }
 
@@ -85,23 +85,25 @@ class CellStorage
                 return current != other.current;
             }
 
-            int operator-(const ColumnIterator &other) const { return (current - other.current) / offset; }
+            int operator-(const ColumnIterator &other) const { return (current - other.current) / stride; }
 
           private:
             WeightPtrT current;
-            std::size_t offset;
+            std::size_t stride;
         };
 
         std::size_t GetRow(NodeID node) const
         {
-            return std::find(source_boundary, source_boundary + num_source_nodes, node) -
-                   source_boundary;
+            auto iter = std::find(source_boundary, source_boundary + num_source_nodes, node);
+            BOOST_ASSERT(iter != source_boundary + num_source_nodes);
+            return iter - source_boundary;
         }
+
         std::size_t GetColumn(NodeID node) const
         {
-            return std::find(
-                       destination_boundary, destination_boundary + num_destination_nodes, node) -
-                   destination_boundary;
+            auto iter = std::find(destination_boundary, destination_boundary + num_destination_nodes, node);
+            BOOST_ASSERT(iter != destination_boundary + num_destination_nodes);
+            return iter - destination_boundary;
         }
 
       public:
@@ -150,8 +152,8 @@ class CellStorage
     inline std::size_t LevelIDToIndex(LevelID level) const { return level-1; }
 
   public:
-    using Cell = CellImpl<EdgeWeight *>;
-    using ConstCell = CellImpl<const EdgeWeight *>;
+    using Cell = CellImpl<EdgeWeight>;
+    using ConstCell = CellImpl<const EdgeWeight>;
 
     template <typename GraphT>
     CellStorage(const MultiLevelPartition &partition, const GraphT &base_graph)
@@ -180,8 +182,7 @@ class CellStorage
                 bool is_destination_node = false;
                 bool is_boundary_node = false;
 
-                for (auto edge = base_graph.BeginEdges(node); edge < base_graph.EndEdges(node);
-                     ++edge)
+                for (auto edge : base_graph.GetAdjacentEdgeRange(node))
                 {
                     auto other = base_graph.GetTarget(edge);
                     const auto &data = base_graph.GetEdgeData(edge);
@@ -273,13 +274,13 @@ class CellStorage
     {
         auto offset = level_to_cell_offset[LevelIDToIndex(level)];
         return ConstCell{
-            cells[offset + id], &weights[0], &source_boundary[0], &destination_boundary[0]};
+            cells[offset + id], weights.data(), source_boundary.data(), destination_boundary.data()};
     }
 
     Cell GetCell(LevelID level, CellID id)
     {
         auto offset = level_to_cell_offset[LevelIDToIndex(level)];
-        return Cell{cells[offset + id], &weights[0], &source_boundary[0], &destination_boundary[0]};
+        return Cell{cells[offset + id], weights.data(), source_boundary.data(), destination_boundary.data()};
     }
 
   private:
