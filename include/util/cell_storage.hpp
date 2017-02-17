@@ -56,6 +56,8 @@ class CellStorage
         const NodeID *const destination_boundary;
 
         using RowIterator = WeightPtrT;
+        // Possibly replace with
+        // http://www.boost.org/doc/libs/1_55_0/libs/range/doc/html/range/reference/adaptors/reference/strided.html
         class ColumnIterator : public std::iterator<std::random_access_iterator_tag, EdgeWeight>
         {
           public:
