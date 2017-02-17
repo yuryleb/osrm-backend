@@ -180,26 +180,24 @@ BOOST_AUTO_TEST_CASE(immutable_cell_storage)
     // 1/2: 4 : 1,1,0
     // 1/3: 6 : 1,1,0
     // 1/5: 11 : 1,1,1
-
     // 1/1: 3 : 1,0,1
     // 1/2: 5 : 1,0,1
     // 1/3: 7 : 1,0,1
 
     // 2/0: 0 : 1,1,0
-    // 2/0: 3 : 1,0,1
     // 2/1: 4 : 1,1,1
-    // 2/1: 7 : 1,0,1
     // 2/3: 11 : 1,1,1
+    // 2/0: 3 : 1,0,1
+    // 2/1: 7 : 1,0,1
 
     // 3/0: 0 : 1,1,0
-    // 3/0: 3 : 1,0,1
     // 3/1: 4 : 1,1,1
     // 3/1: 7 : 1,1,1
+    // 3/0: 3 : 1,0,1
 
     // test const storage
     const CellStorage const_storage(mlp, graph);
 
-    // TODO: Level 2, 3
     auto const_cell_1_0 = const_storage.GetCell(1, 0);
     auto const_cell_1_1 = const_storage.GetCell(1, 1);
     auto const_cell_1_2 = const_storage.GetCell(1, 2);
@@ -207,19 +205,19 @@ BOOST_AUTO_TEST_CASE(immutable_cell_storage)
     auto const_cell_1_4 = const_storage.GetCell(1, 4);
     auto const_cell_1_5 = const_storage.GetCell(1, 5);
 
-    CHECK_EQUAL_RANGE(const_cell_1_0.GetSourceNodes(), std::vector<NodeID>{0});
-    CHECK_EQUAL_RANGE(const_cell_1_1.GetSourceNodes(), std::vector<NodeID>{});
-    CHECK_EQUAL_RANGE(const_cell_1_2.GetSourceNodes(), std::vector<NodeID>{4});
-    CHECK_EQUAL_RANGE(const_cell_1_3.GetSourceNodes(), std::vector<NodeID>{6});
-    CHECK_EQUAL_RANGE(const_cell_1_4.GetSourceNodes(), std::vector<NodeID>{});
-    CHECK_EQUAL_RANGE(const_cell_1_5.GetSourceNodes(), std::vector<NodeID>{11});
+    CHECK_EQUAL_RANGE(const_cell_1_0.GetSourceNodes(), std::vector<NodeID>({0}));
+    CHECK_EQUAL_RANGE(const_cell_1_1.GetSourceNodes(), std::vector<NodeID>({}));
+    CHECK_EQUAL_RANGE(const_cell_1_2.GetSourceNodes(), std::vector<NodeID>({4}));
+    CHECK_EQUAL_RANGE(const_cell_1_3.GetSourceNodes(), std::vector<NodeID>({6}));
+    CHECK_EQUAL_RANGE(const_cell_1_4.GetSourceNodes(), std::vector<NodeID>({}));
+    CHECK_EQUAL_RANGE(const_cell_1_5.GetSourceNodes(), std::vector<NodeID>({11}));
 
-    CHECK_EQUAL_RANGE(const_cell_1_0.GetDestinationNodes(), std::vector<NodeID>{});
-    CHECK_EQUAL_RANGE(const_cell_1_1.GetDestinationNodes(), std::vector<NodeID>{3});
-    CHECK_EQUAL_RANGE(const_cell_1_2.GetDestinationNodes(), std::vector<NodeID>{5});
-    CHECK_EQUAL_RANGE(const_cell_1_3.GetDestinationNodes(), std::vector<NodeID>{7});
-    CHECK_EQUAL_RANGE(const_cell_1_4.GetDestinationNodes(), std::vector<NodeID>{});
-    CHECK_EQUAL_RANGE(const_cell_1_5.GetDestinationNodes(), std::vector<NodeID>{11});
+    CHECK_EQUAL_RANGE(const_cell_1_0.GetDestinationNodes(), std::vector<NodeID>({}));
+    CHECK_EQUAL_RANGE(const_cell_1_1.GetDestinationNodes(), std::vector<NodeID>({3}));
+    CHECK_EQUAL_RANGE(const_cell_1_2.GetDestinationNodes(), std::vector<NodeID>({5}));
+    CHECK_EQUAL_RANGE(const_cell_1_3.GetDestinationNodes(), std::vector<NodeID>({7}));
+    CHECK_EQUAL_RANGE(const_cell_1_4.GetDestinationNodes(), std::vector<NodeID>({}));
+    CHECK_EQUAL_RANGE(const_cell_1_5.GetDestinationNodes(), std::vector<NodeID>({11}));
 
     auto out_const_range_1_0_0 = const_cell_1_0.GetOutWeight(0);
     auto out_const_range_1_2_4 = const_cell_1_2.GetOutWeight(4);
@@ -240,6 +238,34 @@ BOOST_AUTO_TEST_CASE(immutable_cell_storage)
     CHECK_SIZE_RANGE(in_const_range_1_2_5, 1);
     CHECK_SIZE_RANGE(in_const_range_1_3_7, 1);
     CHECK_SIZE_RANGE(in_const_range_1_5_11, 1);
+
+    auto const_cell_2_0 = const_storage.GetCell(2, 0);
+    auto const_cell_2_1 = const_storage.GetCell(2, 1);
+    auto const_cell_2_2 = const_storage.GetCell(2, 2);
+    auto const_cell_2_3 = const_storage.GetCell(2, 3);
+
+    CHECK_EQUAL_RANGE(const_cell_2_0.GetSourceNodes(), std::vector<NodeID>({0}));
+    CHECK_EQUAL_RANGE(const_cell_2_1.GetSourceNodes(), std::vector<NodeID>({4}));
+    CHECK_EQUAL_RANGE(const_cell_2_2.GetSourceNodes(), std::vector<NodeID>({}));
+    CHECK_EQUAL_RANGE(const_cell_2_3.GetSourceNodes(), std::vector<NodeID>({11}));
+
+    CHECK_EQUAL_RANGE(const_cell_2_0.GetDestinationNodes(), std::vector<NodeID>({3}));
+    CHECK_EQUAL_RANGE(const_cell_2_1.GetDestinationNodes(), std::vector<NodeID>({4, 7}));
+    CHECK_EQUAL_RANGE(const_cell_2_2.GetDestinationNodes(), std::vector<NodeID>({}));
+    CHECK_EQUAL_RANGE(const_cell_2_3.GetDestinationNodes(), std::vector<NodeID>({11}));
+
+    auto const_cell_3_0 = const_storage.GetCell(3, 0);
+    auto const_cell_3_1 = const_storage.GetCell(3, 1);
+
+    CHECK_EQUAL_RANGE(const_cell_3_0.GetSourceNodes(), std::vector<NodeID>({0}));
+    CHECK_EQUAL_RANGE(const_cell_3_1.GetSourceNodes(), std::vector<NodeID>({4, 7}));
+
+    CHECK_EQUAL_RANGE(const_cell_3_0.GetDestinationNodes(), std::vector<NodeID>({3}));
+    CHECK_EQUAL_RANGE(const_cell_3_1.GetDestinationNodes(), std::vector<NodeID>({4, 7}));
+
+    auto const_cell_4_0 = const_storage.GetCell(4, 0);
+    CHECK_EQUAL_RANGE(const_cell_4_0.GetSourceNodes(), std::vector<NodeID>({}));
+    CHECK_EQUAL_RANGE(const_cell_4_0.GetDestinationNodes(), std::vector<NodeID>({}));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
