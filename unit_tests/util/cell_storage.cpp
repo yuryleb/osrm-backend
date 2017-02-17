@@ -4,13 +4,13 @@
 #include "util/cell_storage.hpp"
 #include "util/static_graph.hpp"
 
-#define CHECK_SIZE_RANGE(range, ref) BOOST_CHECK_EQUAL(range.second - range.first, ref)
+#define CHECK_SIZE_RANGE(range, ref) BOOST_CHECK_EQUAL(range.end() - range.begin(), ref)
 #define CHECK_EQUAL_RANGE(range, ref)                                                              \
     do                                                                                             \
     {                                                                                              \
         const auto &lhs = range;                                                                   \
         const auto &rhs = ref;                                                                     \
-        BOOST_CHECK_EQUAL_COLLECTIONS(lhs.first, lhs.second, rhs.begin(), rhs.end());              \
+        BOOST_CHECK_EQUAL_COLLECTIONS(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());             \
     } while (0)
 
 using namespace osrm;
@@ -115,10 +115,10 @@ BOOST_AUTO_TEST_CASE(mutable_cell_storage)
     auto in_range_1_5_11 = cell_1_5.GetInWeight(11);
 
     const auto fill_range = [](auto range, const std::vector<EdgeWeight> &values) {
-        auto iter = range.first;
+        auto iter = range.begin();
         for (auto v : values)
             *iter++ = v;
-        BOOST_CHECK_EQUAL(range.second, iter);
+        BOOST_CHECK_EQUAL(range.end(), iter);
     };
 
     fill_range(out_range_1_0_0, {});

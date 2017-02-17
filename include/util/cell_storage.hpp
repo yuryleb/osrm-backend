@@ -2,9 +2,12 @@
 #define OSRM_UTIL_CELL_STORAGE_HPP
 
 #include "util/assert.hpp"
+#include "util/for_each_range.hpp"
 #include "util/multi_level_partition.hpp"
 #include "util/typedefs.hpp"
-#include "util/for_each_range.hpp"
+
+#include <boost/range/iterator_range.hpp>
+#include <tbb/parallel_sort.h>
 
 #include <algorithm>
 #include <numeric>
@@ -43,8 +46,8 @@ class CellStorage
     template <typename WeightValueT> class CellImpl
     {
       private:
-        using WeightPtrT = WeightValueT*;
-        using WeightRefT = WeightValueT&;
+        using WeightPtrT = WeightValueT *;
+        using WeightRefT = WeightValueT &;
         BoundarySize num_source_nodes;
         BoundarySize num_destination_nodes;
 
@@ -75,17 +78,14 @@ class CellStorage
                 return *this;
             }
 
-            bool operator==(const ColumnIterator& other) const
-            {
-                return current == other.current;
-            }
+            bool operator==(const ColumnIterator &other) const { return current == other.current; }
 
-            bool operator!=(const ColumnIterator& other) const
-            {
-                return current != other.current;
-            }
+            bool operator!=(const ColumnIterator &other) const { return current != other.current; }
 
-            int operator-(const ColumnIterator &other) const { return (current - other.current) / stride; }
+            int operator-(const ColumnIterator &other) const
+            {
+                return (current - other.current) / stride;
+            }
 
           private:
             WeightPtrT current;
@@ -101,39 +101,39 @@ class CellStorage
 
         std::size_t GetColumn(NodeID node) const
         {
-            auto iter = std::find(destination_boundary, destination_boundary + num_destination_nodes, node);
+            auto iter =
+                std::find(destination_boundary, destination_boundary + num_destination_nodes, node);
             BOOST_ASSERT(iter != destination_boundary + num_destination_nodes);
             return iter - destination_boundary;
         }
 
       public:
-        std::pair<RowIterator, RowIterator> GetOutWeight(NodeID node) const
+        auto GetOutWeight(NodeID node) const
         {
             auto row = GetRow(node);
             auto begin = weights + num_destination_nodes * row;
             auto end = begin + num_destination_nodes;
-            return std::make_pair(begin, end);
+            return boost::make_iterator_range(begin, end);
         }
 
-        std::pair<ColumnIterator, ColumnIterator> GetInWeight(NodeID node) const
+        auto GetInWeight(NodeID node) const
         {
             auto column = GetColumn(node);
             auto begin = ColumnIterator{weights + column, num_destination_nodes};
-            auto end =
-                ColumnIterator{weights + column + num_source_nodes * num_destination_nodes,
-                               num_destination_nodes};
-            return std::make_pair(begin, end);
+            auto end = ColumnIterator{weights + column + num_source_nodes * num_destination_nodes,
+                                      num_destination_nodes};
+            return boost::make_iterator_range(begin, end);
         }
 
         auto GetSourceNodes() const
         {
-            return std::make_pair(source_boundary, source_boundary + num_source_nodes);
+            return boost::make_iterator_range(source_boundary, source_boundary + num_source_nodes);
         }
 
         auto GetDestinationNodes() const
         {
-            return std::make_pair(destination_boundary,
-                                  destination_boundary + num_destination_nodes);
+            return boost::make_iterator_range(destination_boundary,
+                                              destination_boundary + num_destination_nodes);
         }
 
         CellImpl(const CellData &data,
@@ -146,10 +146,13 @@ class CellStorage
               source_boundary{all_sources + data.source_boundary_offset},
               destination_boundary{all_destinations + data.destination_boundary_offset}
         {
+            BOOST_ASSERT(all_weight != nullptr);
+            BOOST_ASSERT(all_sources != nullptr);
+            BOOST_ASSERT(all_destinations != nullptr);
         }
     };
 
-    inline std::size_t LevelIDToIndex(LevelID level) const { return level-1; }
+    std::size_t LevelIDToIndex(LevelID level) const { return level - 1; }
 
   public:
     using Cell = CellImpl<EdgeWeight>;
@@ -168,12 +171,15 @@ class CellStorage
         level_to_cell_offset.push_back(number_of_cells);
         cells.resize(number_of_cells);
 
+        std::vector<std::pair<CellID, NodeID>> level_source_boundary;
+        std::vector<std::pair<CellID, NodeID>> level_destination_boundary;
+
         for (LevelID level = 1u; level < partition.GetNumberOfLevels(); ++level)
         {
             auto level_offset = level_to_cell_offset[LevelIDToIndex(level)];
 
-            std::vector<std::pair<CellID, NodeID>> level_source_boundary;
-            std::vector<std::pair<CellID, NodeID>> level_destination_boundary;
+            level_source_boundary.clear();
+            level_destination_boundary.clear();
 
             for (auto node = 0u; node < base_graph.GetNumberOfNodes(); ++node)
             {
@@ -208,8 +214,9 @@ class CellStorage
                 }
             }
 
-            std::sort(level_source_boundary.begin(), level_source_boundary.end());
-            std::sort(level_destination_boundary.begin(), level_destination_boundary.end());
+            tbb::parallel_sort(level_source_boundary.begin(), level_source_boundary.end());
+            tbb::parallel_sort(level_destination_boundary.begin(),
+                               level_destination_boundary.end());
 
             util::for_each_range(
                 level_source_boundary.begin(),
@@ -256,7 +263,7 @@ class CellStorage
             weight_offset += cell.num_source_nodes * cell.num_destination_nodes;
         }
 
-        weights.resize(weight_offset+1, INVALID_EDGE_WEIGHT);
+        weights.resize(weight_offset + 1, INVALID_EDGE_WEIGHT);
     }
 
     CellStorage(std::vector<EdgeWeight> weights_,
@@ -272,15 +279,24 @@ class CellStorage
 
     ConstCell GetCell(LevelID level, CellID id) const
     {
-        auto offset = level_to_cell_offset[LevelIDToIndex(level)];
+        const auto level_index = LevelIDToIndex(level);
+        BOOST_ASSERT(level_index < level_to_cell_offset.size());
+        const auto offset = level_to_cell_offset[level_index];
+        const auto cell_index = offset + id;
+        BOOST_ASSERT(cell_index < cells.size());
         return ConstCell{
-            cells[offset + id], weights.data(), source_boundary.data(), destination_boundary.data()};
+            cells[cell_index], weights.data(), source_boundary.data(), destination_boundary.data()};
     }
 
     Cell GetCell(LevelID level, CellID id)
     {
-        auto offset = level_to_cell_offset[LevelIDToIndex(level)];
-        return Cell{cells[offset + id], weights.data(), source_boundary.data(), destination_boundary.data()};
+        const auto level_index = LevelIDToIndex(level);
+        BOOST_ASSERT(level_index < level_to_cell_offset.size());
+        const auto offset = level_to_cell_offset[level_index];
+        const auto cell_index = offset + id;
+        BOOST_ASSERT(cell_index < cells.size());
+        return Cell{
+            cells[cell_index], weights.data(), source_boundary.data(), destination_boundary.data()};
     }
 
   private:
