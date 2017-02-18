@@ -82,6 +82,11 @@ BOOST_AUTO_TEST_CASE(mutable_cell_storage)
     BOOST_CHECK_EQUAL(mlp.GetCell(4, 9),  l4[9]);
     BOOST_CHECK_EQUAL(mlp.GetCell(4, 10), l4[10]);
     BOOST_CHECK_EQUAL(mlp.GetCell(4, 11), l4[11]);
+
+    BOOST_CHECK_EQUAL(mlp.GetHighestDifferentLevel(0, 1), 0);
+    BOOST_CHECK_EQUAL(mlp.GetHighestDifferentLevel(0, 2), 1);
+    BOOST_CHECK_EQUAL(mlp.GetHighestDifferentLevel(0, 4), 3);
+    BOOST_CHECK_EQUAL(mlp.GetHighestDifferentLevel(7, 8), 2);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

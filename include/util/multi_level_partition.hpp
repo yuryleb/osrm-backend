@@ -170,7 +170,7 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
     {
         std::array<LevelID, NUM_PARTITION_BITS> bit_to_level;
 
-        LevelID l = 0;
+        LevelID l = 1;
         for (auto bits : level_offsets)
         {
             // set all bits to point to the correct level.
