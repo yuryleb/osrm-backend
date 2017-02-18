@@ -33,7 +33,6 @@ template <typename T> std::size_t highestMSB(T value)
 }
 }
 
-
 using LevelID = std::uint8_t;
 using CellID = std::uint32_t;
 
@@ -78,9 +77,9 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
     CellID GetCell(LevelID l, NodeID node) const final override
     {
         auto p = partition[node];
-        auto idx = LevelIDToIndex(l);
-        auto masked = p & level_masks[idx];
-        return masked >> level_offsets[idx];
+        auto lidx = LevelIDToIndex(l);
+        auto masked = p & level_masks[lidx];
+        return masked >> level_offsets[lidx];
     }
 
     LevelID GetQueryLevel(NodeID start, NodeID target, NodeID node) const final override
@@ -98,20 +97,20 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
         return bit_to_level[msb];
     }
 
-    std::size_t GetNumberOfLevels() const
+    std::size_t GetNumberOfLevels() const final override
     {
         return level_offsets.size();
     }
 
-    std::size_t GetNumberOfCells(LevelID level) const
+    std::size_t GetNumberOfCells(LevelID level) const final override
     {
-        auto max_id = GetCell(level, GetSenitileNode());
+        return GetCell(level, GetSenitileNode());
     }
 
   private:
     inline std::size_t LevelIDToIndex(LevelID l) const { return l - 1; }
 
-    // We save the senitile as last node in the partition information.
+    // We save the sentinel as last node in the partition information.
     // It has the highest cell id in each level so we can derived the range
     // of cell ids efficiently.
     inline NodeID GetSenitileNode() const { return partition.size() - 1; }
@@ -136,12 +135,12 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
         for (auto num_cells : level_to_num_cells)
         {
             // bits needed to number all contained vertexes
-            auto bits = static_cast<std::uint64_t>(std::ceil(std::log2(num_cells)));
+            auto bits = static_cast<std::uint64_t>(std::ceil(std::log2(num_cells + 1)));
             offsets.push_back(sum_bits);
             sum_bits += bits;
             BOOST_ASSERT(sum_bits < 64);
         }
-        // senitile
+        // sentinel
         offsets.push_back(sum_bits);
 
         return offsets;
@@ -190,8 +189,9 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
         auto num_nodes = partitions.front().size();
         std::vector<NodeID> permutation(num_nodes);
         std::iota(permutation.begin(), permutation.end(), 0);
-        // We include a senitile element at the end of the partition
-        partition.resize(num_nodes + 1);
+        // We include a sentinel element at the end of the partition
+        partition.resize(num_nodes + 1, 0);
+        NodeID sentinel = num_nodes;
 
         // Sort nodes bottum-up by cell id.
         // This ensures that we get a nice grouping from parent to child cells:
@@ -220,7 +220,7 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
         }
 
         // top down assign new cell ids
-        LevelID level = partitions.size() + 1;
+        LevelID level = partitions.size();
         for (const auto &partition : boost::adaptors::reverse(partitions))
         {
             BOOST_ASSERT(permutation.size() > 0);
@@ -231,9 +231,12 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
                 if (last_cell_id != partition[node])
                 {
                     cell_id++;
+                    last_cell_id = partition[node];
                 }
                 SetCellID(level, node, cell_id);
             }
+            // Store the number of cells of the level in the sentinel
+            SetCellID(level, sentinel, cell_id+1);
             level--;
         }
     }
