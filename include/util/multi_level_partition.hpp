@@ -45,6 +45,12 @@ class MultiLevelPartition
     // Returns the cell id of `node` at `level`
     virtual CellID GetCell(LevelID level, NodeID node) const = 0;
 
+    // Returns the lowest cell id (at `level - 1`) of all children `cell` at `level`
+    virtual CellID BeginChildren(LevelID level, CellID cell) const = 0;
+
+    // Returns the highest cell id (at `level - 1`) of all children `cell` at `level`
+    virtual CellID EndChildren(LevelID level, CellID cell) const = 0;
+
     // Returns the highest level in which `first` and `second` are still in different cells
     virtual LevelID GetHighestDifferentLevel(NodeID first, NodeID second) const = 0;
 
@@ -105,6 +111,24 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
     std::size_t GetNumberOfCells(LevelID level) const final override
     {
         return GetCell(level, GetSenitileNode());
+    }
+
+    // Returns the lowest cell id (at `level - 1`) of all children `cell` at `level`
+    CellID BeginChildren(LevelID level, CellID cell) const final override
+    {
+        BOOST_ASSERT(level > 1);
+        auto lidx = LevelIDToIndex(level);
+        auto offset = level_to_children_offset[lidx];
+        return cell_to_children[offset + cell];
+    }
+
+    // Returns the highest cell id (at `level - 1`) of all children `cell` at `level`
+    CellID EndChildren(LevelID level, CellID cell) const final override
+    {
+        BOOST_ASSERT(level > 1);
+        auto lidx = LevelIDToIndex(level);
+        auto offset = level_to_children_offset[lidx];
+        return cell_to_children[offset + cell + 1];
     }
 
   private:
@@ -239,11 +263,38 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
             SetCellID(level, sentinel, cell_id+1);
             level--;
         }
+
+        // level 1 does not have child cells
+        level_to_children_offset.push_back(0);
+
+        for (auto level_idx = 0UL; level_idx < partitions.size()-1; ++level_idx)
+        {
+            const auto &parent_partition = partitions[level_idx+1];
+
+            level_to_children_offset.push_back(cell_to_children.size());
+
+            CellID last_parent_id = parent_partition[permutation.front()];
+            cell_to_children.push_back(GetCell(level_idx+1, permutation.front()));
+            for (const auto node : permutation)
+            {
+                if (last_parent_id != parent_partition[node])
+                {
+                    // Note: we use the new cell id here, not the ones contained
+                    // in the input partition
+                    cell_to_children.push_back(GetCell(level_idx+1, node));
+                    last_parent_id = parent_partition[node];
+                }
+            }
+            // insert sentinel for the last cell
+            cell_to_children.push_back(GetCell(level_idx+1, permutation.back()) + 1);
+        }
     }
 
     std::vector<PartitionID> partition;
     std::vector<std::size_t> level_offsets;
     std::vector<PartitionID> level_masks;
+    std::vector<std::size_t> level_to_children_offset;
+    std::vector<CellID> cell_to_children;
     std::array<LevelID, NUM_PARTITION_BITS> bit_to_level;
 };
 }

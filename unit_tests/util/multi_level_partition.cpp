@@ -17,7 +17,7 @@ using namespace osrm::util;
 
 BOOST_AUTO_TEST_SUITE(multi_level_partition_tests)
 
-BOOST_AUTO_TEST_CASE(mutable_cell_storage)
+BOOST_AUTO_TEST_CASE(packed_mlp)
 {
     // node:                0  1  2  3  4  5  6  7  8  9 10 11
     std::vector<CellID> l1{{0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5}};
@@ -87,6 +87,23 @@ BOOST_AUTO_TEST_CASE(mutable_cell_storage)
     BOOST_CHECK_EQUAL(mlp.GetHighestDifferentLevel(0, 2), 1);
     BOOST_CHECK_EQUAL(mlp.GetHighestDifferentLevel(0, 4), 3);
     BOOST_CHECK_EQUAL(mlp.GetHighestDifferentLevel(7, 8), 2);
+
+    BOOST_CHECK_EQUAL(mlp.BeginChildren(2, 0), 0);
+    BOOST_CHECK_EQUAL(mlp.EndChildren(2, 0), 2);
+    BOOST_CHECK_EQUAL(mlp.BeginChildren(2, 1), 2);
+    BOOST_CHECK_EQUAL(mlp.EndChildren(2, 1), 4);
+    BOOST_CHECK_EQUAL(mlp.BeginChildren(2, 2), 4);
+    BOOST_CHECK_EQUAL(mlp.EndChildren(2, 2), 5);
+    BOOST_CHECK_EQUAL(mlp.BeginChildren(2, 3), 5);
+    BOOST_CHECK_EQUAL(mlp.EndChildren(2, 3), 6);
+
+    BOOST_CHECK_EQUAL(mlp.BeginChildren(3, 0), 0);
+    BOOST_CHECK_EQUAL(mlp.EndChildren(3, 0), 1);
+    BOOST_CHECK_EQUAL(mlp.BeginChildren(3, 1), 1);
+    BOOST_CHECK_EQUAL(mlp.EndChildren(3, 1), 4);
+
+    BOOST_CHECK_EQUAL(mlp.BeginChildren(4, 0), 0);
+    BOOST_CHECK_EQUAL(mlp.EndChildren(4, 0), 2);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

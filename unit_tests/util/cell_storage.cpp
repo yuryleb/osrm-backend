@@ -34,6 +34,9 @@ class MockMLP final : public MultiLevelPartition
         return max_id + 1;
     }
 
+    CellID BeginChildren(LevelID, CellID) const { return 0; }
+    CellID EndChildren(LevelID, CellID) const { return 0; }
+
     MockMLP(std::vector<std::vector<CellID>> levels_) : levels(std::move(levels_)) {}
 
     std::vector<std::vector<CellID>> levels;
