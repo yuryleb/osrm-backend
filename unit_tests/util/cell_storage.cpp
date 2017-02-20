@@ -117,7 +117,7 @@ BOOST_AUTO_TEST_CASE(mutable_cell_storage)
     auto cell_1_4 = storage.GetCell(1, 4);
     auto cell_1_5 = storage.GetCell(1, 5);
 
-    (void) cell_1_4; // does not have border nodes
+    (void)cell_1_4; // does not have border nodes
 
     auto out_range_1_0_0 = cell_1_0.GetOutWeight(0);
     auto out_range_1_2_4 = cell_1_2.GetOutWeight(4);
@@ -145,10 +145,10 @@ BOOST_AUTO_TEST_CASE(mutable_cell_storage)
     auto cell_2_2 = storage.GetCell(2, 2);
     auto cell_2_3 = storage.GetCell(2, 3);
 
-    (void) cell_2_2; // does not have border nodes
+    (void)cell_2_2; // does not have border nodes
 
-    auto out_range_2_0_0  = cell_2_0.GetOutWeight(0);
-    auto out_range_2_1_4  = cell_2_1.GetOutWeight(4);
+    auto out_range_2_0_0 = cell_2_0.GetOutWeight(0);
+    auto out_range_2_1_4 = cell_2_1.GetOutWeight(4);
     auto out_range_2_3_11 = cell_2_3.GetOutWeight(11);
 
     auto in_range_2_0_3 = cell_2_0.GetInWeight(3);
