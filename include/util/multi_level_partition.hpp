@@ -1,8 +1,8 @@
 #ifndef OSRM_UTIL_MULTI_LEVEL_PARTITION_HPP
 #define OSRM_UTIL_MULTI_LEVEL_PARTITION_HPP
 
-#include "util/typedefs.hpp"
 #include "util/for_each_pair.hpp"
+#include "util/typedefs.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -30,6 +30,25 @@ template <typename T> std::size_t highestMSB(T value)
         msb++;
     }
     return msb;
+}
+
+// Adapted from https://graphics.stanford.edu/%7Eseander/bithacks.html#IntegerLog
+// for 64bit numbers.
+// About factor 2x faster then the generic implementation above.
+inline std::size_t highestMSB(std::uint64_t v)
+{
+    std::uint64_t r;
+    std::uint64_t shift;
+
+    // clang-format off
+    r = (v > 0xFFFFFFFF) << 5; v >>= r;
+    shift = (v > 0xFFFF) << 4; v >>= shift; r |= shift;
+    shift = (v > 0xFF  ) << 3; v >>= shift; r |= shift;
+    shift = (v > 0xF   ) << 2; v >>= shift; r |= shift;
+    shift = (v > 0x3   ) << 1; v >>= shift; r |= shift;
+                                            r |= (v >> 1);
+    // clang-format on
+    return r;
 }
 }
 
@@ -103,10 +122,7 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
         return bit_to_level[msb];
     }
 
-    std::size_t GetNumberOfLevels() const final override
-    {
-        return level_offsets.size();
-    }
+    std::size_t GetNumberOfLevels() const final override { return level_offsets.size(); }
 
     std::size_t GetNumberOfCells(LevelID level) const final override
     {
@@ -175,17 +191,19 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
         std::vector<PartitionID> masks;
         masks.reserve(level_offsets.size());
 
-        util::for_each_pair(level_offsets.begin(), level_offsets.end(), [&](const auto offset, const auto next_offset) {
-            // create mask that has `bits` ones at its LSBs.
-            // 000011
-            BOOST_ASSERT(offset < sizeof(PartitionID)*8);
-            PartitionID mask = (1UL << offset) - 1UL;
-            // 001111
-            BOOST_ASSERT(next_offset < sizeof(PartitionID)*8);
-            PartitionID next_mask = (1UL << next_offset) - 1UL;
-            // 001100
-            masks.push_back(next_mask ^ mask);
-        });
+        util::for_each_pair(level_offsets.begin(),
+                            level_offsets.end(),
+                            [&](const auto offset, const auto next_offset) {
+                                // create mask that has `bits` ones at its LSBs.
+                                // 000011
+                                BOOST_ASSERT(offset < sizeof(PartitionID) * 8);
+                                PartitionID mask = (1UL << offset) - 1UL;
+                                // 001111
+                                BOOST_ASSERT(next_offset < sizeof(PartitionID) * 8);
+                                PartitionID next_mask = (1UL << next_offset) - 1UL;
+                                // 001100
+                                masks.push_back(next_mask ^ mask);
+                            });
 
         return masks;
     }
@@ -238,7 +256,7 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
         {
             std::stable_sort(permutation.begin(),
                              permutation.end(),
-                             [partition](const auto lhs, const auto rhs) {
+                             [&partition](const auto lhs, const auto rhs) {
                                  return partition[lhs] < partition[rhs];
                              });
         }
@@ -260,33 +278,33 @@ class PackedMultiLevelPartition final : public MultiLevelPartition
                 SetCellID(level, node, cell_id);
             }
             // Store the number of cells of the level in the sentinel
-            SetCellID(level, sentinel, cell_id+1);
+            SetCellID(level, sentinel, cell_id + 1);
             level--;
         }
 
         // level 1 does not have child cells
         level_to_children_offset.push_back(0);
 
-        for (auto level_idx = 0UL; level_idx < partitions.size()-1; ++level_idx)
+        for (auto level_idx = 0UL; level_idx < partitions.size() - 1; ++level_idx)
         {
-            const auto &parent_partition = partitions[level_idx+1];
+            const auto &parent_partition = partitions[level_idx + 1];
 
             level_to_children_offset.push_back(cell_to_children.size());
 
             CellID last_parent_id = parent_partition[permutation.front()];
-            cell_to_children.push_back(GetCell(level_idx+1, permutation.front()));
+            cell_to_children.push_back(GetCell(level_idx + 1, permutation.front()));
             for (const auto node : permutation)
             {
                 if (last_parent_id != parent_partition[node])
                 {
                     // Note: we use the new cell id here, not the ones contained
                     // in the input partition
-                    cell_to_children.push_back(GetCell(level_idx+1, node));
+                    cell_to_children.push_back(GetCell(level_idx + 1, node));
                     last_parent_id = parent_partition[node];
                 }
             }
             // insert sentinel for the last cell
-            cell_to_children.push_back(GetCell(level_idx+1, permutation.back()) + 1);
+            cell_to_children.push_back(GetCell(level_idx + 1, permutation.back()) + 1);
         }
     }
 
